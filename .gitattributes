@@ -1,0 +1,14 @@
+# Normalise line endings so the repo is identical across Windows/macOS/Linux.
+* text=auto eol=lf
+
+# Shell scripts must keep LF or they break inside containers.
+*.sh text eol=lf
+
+# Generated, and noisy in diffs.
+package-lock.json linguist-generated=true -diff
+
+# Binary
+*.png binary
+*.jpg binary
+*.pdf binary
+*.ico binary

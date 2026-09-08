@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# Environment & secrets  -- NEVER commit real secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+secrets/
+*.pem
+*.key
+!apps/api/test/fixtures/*.key
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+
+# Test output
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+
+# Local object storage (dev filesystem storage driver)
+.storage/
+var/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/settings.json.example
+
+# Prisma
+apps/api/prisma/*.db
