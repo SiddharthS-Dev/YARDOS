@@ -1,7 +1,10 @@
 'use client';
 
+import * as React from 'react';
 import Link from 'next/link';
 import {
+  AlertTriangle,
+  ArrowRight,
   Banknote,
   Building2,
   Car,
@@ -9,371 +12,593 @@ import {
   Gavel,
   LogIn,
   LogOut,
-  ScanLine,
-  TriangleAlert,
+  Radio,
+  Receipt,
+  Truck,
 } from 'lucide-react';
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
 
+import { useAuth } from '@/lib/auth-context';
+import { useSite } from '@/lib/site-context';
 import { ApiError } from '@/lib/api';
-import { formatDateTime, formatMoney, formatMoneyCompact } from '@/lib/format';
+import { formatAgeing, formatMoneyCompact, formatRelative } from '@/lib/format';
 import {
-  EmptyState,
-  ErrorState,
-  MetricCard,
-  Panel,
-  PanelHeader,
-  SkeletonRows,
-  UtilisationBar,
-} from '@/components/ui/primitives';
-import {
-  useActivity,
   useAgeing,
   useDashboard,
   useOccupancy,
+  useReleases,
   useRevenue,
+  useSessions,
 } from '@/hooks/use-domain';
+import {
+  Age,
+  CapacityBar,
+  EmptyState,
+  ErrorState,
+  LiveDot,
+  Money,
+  Panel,
+  PanelHeader,
+  SkeletonRows,
+  StatusBadge,
+  VehicleIdentifier,
+} from '@/components/ui/primitives';
+import { KpiTile, PageHeader, Section } from '@/components/ui/page';
 
 /**
- * Management dashboard.
+ * Operations overview.
  *
- * Every figure comes from a reporting endpoint that derives it from persisted
- * state. Nothing is hardcoded and nothing is padded: where there is no data
- * the panel says so rather than drawing a plausible-looking line.
+ * Composed as a control room rather than a metric grid. The question it answers
+ * is not "how are we doing" but "what needs attention right now, and where do I
+ * go to deal with it" - so every figure on this page is a link into the list it
+ * summarises, and the sections are ordered by how urgently they are usually
+ * acted on: what is happening at the gate, whether there is room, what has been
+ * here too long, what is waiting to leave, what is owed.
+ *
+ * Every number comes from `/reports/*`, which the API scopes to the caller. A
+ * financier user sees their own portfolio through the same components; nothing
+ * here is computed in the browser.
  */
-export default function DashboardPage() {
-  const summary = useDashboard();
-  const occupancy = useOccupancy();
-  const ageing = useAgeing();
-  const activity = useActivity(30);
-  const revenue = useRevenue();
+export default function OperationsOverviewPage() {
+  const { user } = useAuth();
+  const { siteId, currentSite } = useSite();
+  const scope = siteId ?? undefined;
+
+  const summary = useDashboard(scope);
+  const occupancy = useOccupancy(scope);
+  const ageing = useAgeing(scope);
+  const revenue = useRevenue(scope);
+
+  const oldest = useSessions({
+    status: ['OPEN', 'ON_HOLD'],
+    pageSize: 8,
+    sortBy: 'entryAt',
+    sortDir: 'asc',
+    siteId: scope,
+  });
+
+  const pendingReleases = useReleases({
+    status: ['SUBMITTED', 'AWAITING_APPROVAL', 'AWAITING_PAYMENT', 'APPROVED'],
+    pageSize: 6,
+    siteId: scope,
+  });
+
+  const recent = useSessions({ pageSize: 6, sortBy: 'entryAt', sortDir: 'desc', siteId: scope });
+
+  const data = summary.data;
 
   return (
-    <div className="space-y-3 p-3">
-      <header className="flex flex-wrap items-baseline justify-between gap-2 px-1">
-        <h1 className="text-base font-semibold tracking-wide text-white">Operations dashboard</h1>
-        {summary.data ? (
-          <p className="text-2xs text-muted-500">
-            As at {formatDateTime(summary.data.generatedAt)}
-          </p>
+    <div className="flex min-h-full flex-col">
+      <PageHeader
+        title="Operations overview"
+        subtitle={
+          currentSite
+            ? `${currentSite.name} · live vehicle, yard and financial state`
+            : 'All sites · live vehicle, yard and financial state'
+        }
+        meta={
+          <div className="flex flex-wrap items-center gap-3 text-2xs text-ink-3">
+            <LiveDot live={!summary.isError} label="Refreshes every 30 seconds" />
+            {data ? <span>Generated {formatRelative(data.generatedAt)}</span> : null}
+          </div>
+        }
+      />
+
+      <div className="flex-1 space-y-5 p-4">
+        {summary.isError ? (
+          <Panel>
+            <ErrorState
+              title="Operational figures could not be loaded"
+              message={summary.error instanceof ApiError ? summary.error.message : undefined}
+              correlationId={
+                summary.error instanceof ApiError ? summary.error.correlationId : undefined
+              }
+              onRetry={() => void summary.refetch()}
+            />
+          </Panel>
         ) : null}
-      </header>
 
-      {summary.isError ? (
-        <Panel>
-          <ErrorState
-            message={
-              summary.error instanceof ApiError ? summary.error.message : 'Could not load the dashboard.'
-            }
-            correlationId={summary.error instanceof ApiError ? summary.error.correlationId : undefined}
-            onRetry={() => void summary.refetch()}
-          />
-        </Panel>
-      ) : summary.isLoading ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {Array.from({ length: 8 }).map((_, index) => (
-            <div key={index} className="h-24 animate-pulse rounded-panel bg-base-850" />
-          ))}
-        </div>
-      ) : summary.data ? (
-        <>
-          <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <MetricCard
-              label="Vehicles in yard"
-              value={summary.data.vehiclesInYard}
+        {/* ---------- What needs attention ---------------------------- */}
+        <Section
+          title="Requires attention"
+          description="Each figure opens the list behind it"
+        >
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+            <KpiTile
+              label="In yard"
+              value={data?.vehiclesInYard ?? '—'}
               icon={Car}
-              tone="accent"
               href="/yard"
+              loading={summary.isLoading}
+              hint={`${data?.entriesToday ?? 0} in / ${data?.exitsToday ?? 0} out today`}
             />
-            <MetricCard
-              label="Entries today"
-              value={summary.data.entriesToday}
-              icon={LogIn}
-              tone="ok"
-            />
-            <MetricCard
-              label="Exits today"
-              value={summary.data.exitsToday}
-              icon={LogOut}
-              tone="info"
-            />
-            <MetricCard
-              label="Ageing over 90 days"
-              value={summary.data.ageingBeyondThreshold}
+            <KpiTile
+              label="Ageing beyond threshold"
+              value={data?.ageingBeyondThreshold ?? '—'}
               icon={Clock}
-              tone={summary.data.ageingBeyondThreshold > 0 ? 'warn' : 'neutral'}
-              hint="Candidates for review or auction"
+              kind={(data?.ageingBeyondThreshold ?? 0) > 0 ? 'WARNING' : undefined}
+              href="/yard?ageing=critical"
+              loading={summary.isLoading}
+              hint="Long-standing vehicles"
             />
-          </section>
-
-          {/* Work queues. These are the things somebody has to act on. */}
-          <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <MetricCard
-              label="Awaiting capture review"
-              value={summary.data.captureReviewQueue}
-              icon={ScanLine}
-              tone={summary.data.captureReviewQueue > 0 ? 'warn' : 'neutral'}
-              hint="Low-confidence plate reads"
-              href="/gate"
+            <KpiTile
+              label="Awaiting registry"
+              value={data?.awaitingEnrichment ?? '—'}
+              icon={Radio}
+              kind={(data?.awaitingEnrichment ?? 0) > 0 ? 'PENDING' : undefined}
+              href="/vehicles?registry=pending"
+              loading={summary.isLoading}
+              hint="Enrichment in progress"
             />
-            <MetricCard
-              label="Stays without a rate"
-              value={summary.data.withoutContract}
-              icon={TriangleAlert}
-              tone={summary.data.withoutContract > 0 ? 'warn' : 'neutral'}
-              hint="Finance must attach a contract"
-              href="/yard?rateUnresolvedOnly=true"
+            <KpiTile
+              label="Unpriced stays"
+              value={data?.withoutContract ?? '—'}
+              icon={AlertTriangle}
+              kind={(data?.withoutContract ?? 0) > 0 ? 'WARNING' : undefined}
+              href="/yard?rate=unresolved"
+              loading={summary.isLoading}
+              hint="No rate plan attached"
             />
-            <MetricCard
-              label="Releases in progress"
-              value={summary.data.pendingReleases}
+            <KpiTile
+              label="Pending releases"
+              value={data?.pendingReleases ?? '—'}
               icon={LogOut}
-              tone={summary.data.pendingReleases > 0 ? 'info' : 'neutral'}
-              href="/billing"
+              kind={(data?.pendingReleases ?? 0) > 0 ? 'PENDING' : undefined}
+              href="/yard?view=releases"
+              loading={summary.isLoading}
+              hint="Awaiting approval or payment"
             />
-            <MetricCard
-              label="Open auctions"
-              value={summary.data.openAuctions}
-              icon={Gavel}
-              tone={summary.data.openAuctions > 0 ? 'info' : 'neutral'}
-              hint={
-                Number(summary.data.auctionPipelineValue) > 0
-                  ? `${formatMoneyCompact(summary.data.auctionPipelineValue)} at reserve`
-                  : undefined
-              }
-              href="/auctions"
+            <KpiTile
+              label="Capture review"
+              value={data?.captureReviewQueue ?? '—'}
+              icon={Radio}
+              kind={(data?.captureReviewQueue ?? 0) > 0 ? 'WARNING' : undefined}
+              href="/gate"
+              loading={summary.isLoading}
+              hint="Low-confidence reads"
             />
-          </section>
+          </div>
+        </Section>
 
-          <section className="grid gap-3 sm:grid-cols-2">
-            <MetricCard
-              label="Outstanding receivables"
-              value={formatMoneyCompact(summary.data.outstandingAmount)}
-              icon={Banknote}
-              tone={Number(summary.data.outstandingAmount) > 0 ? 'warn' : 'ok'}
-              hint={`${summary.data.outstandingInvoiceCount} unsettled invoice${summary.data.outstandingInvoiceCount === 1 ? '' : 's'}`}
-              href="/billing?outstandingOnly=true"
-            />
-            <MetricCard
-              label="Collected this month"
-              value={formatMoneyCompact(summary.data.collectedThisMonth)}
-              icon={Banknote}
-              tone="ok"
-            />
-          </section>
-        </>
-      ) : null}
-
-      <div className="grid gap-3 lg:grid-cols-2">
-        {/* Entries and exits */}
-        <Panel>
-          <PanelHeader
-            title="Entries and exits"
-            subtitle="Last 30 days"
-            icon={LogIn}
-          />
-          {activity.isLoading ? (
-            <SkeletonRows rows={4} />
-          ) : (activity.data?.series.length ?? 0) === 0 ? (
-            <EmptyState title="No movement recorded" description="Entries and exits will chart here once vehicles start moving." />
-          ) : (
-            <div className="h-56">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={activity.data?.series ?? []} margin={{ top: 6, right: 8, bottom: 0, left: -20 }}>
-                  <CartesianGrid stroke="#1e2c48" strokeDasharray="3 3" vertical={false} />
-                  <XAxis
-                    dataKey="date"
-                    tick={{ fill: '#64748b', fontSize: 10 }}
-                    tickLine={false}
-                    axisLine={{ stroke: '#1e2c48' }}
-                    tickFormatter={(value: string) => value.slice(5)}
-                    minTickGap={24}
-                  />
-                  <YAxis
-                    tick={{ fill: '#64748b', fontSize: 10 }}
-                    tickLine={false}
-                    axisLine={false}
-                    allowDecimals={false}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      background: '#0f1729',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      borderRadius: 8,
-                      fontSize: 12,
-                    }}
-                    labelStyle={{ color: '#94a3b8' }}
-                  />
-                  <Line type="monotone" dataKey="entries" stroke="#34d399" strokeWidth={2} dot={false} name="Entries" />
-                  <Line type="monotone" dataKey="exits" stroke="#60a5fa" strokeWidth={2} dot={false} name="Exits" />
-                </LineChart>
-              </ResponsiveContainer>
+        {/* ---------- Money -------------------------------------------- */}
+        <Section title="Financial exposure" description="Derived from issued invoices">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+              <KpiTile
+                label="Outstanding"
+                value={data ? formatMoneyCompact(data.outstandingAmount) : '—'}
+                icon={Receipt}
+                kind={Number(data?.outstandingAmount ?? 0) > 0 ? 'WARNING' : 'SUCCESS'}
+                href="/billing?outstanding=1"
+                loading={summary.isLoading}
+                hint={`${data?.outstandingInvoiceCount ?? 0} unsettled invoice(s)`}
+              />
+              <KpiTile
+                label="Collected this month"
+                value={data ? formatMoneyCompact(data.collectedThisMonth) : '—'}
+                icon={Banknote}
+                kind="SUCCESS"
+                href="/billing?view=payments"
+                loading={summary.isLoading}
+              />
+              <KpiTile
+                label="Auction pipeline"
+                value={data ? formatMoneyCompact(data.auctionPipelineValue) : '—'}
+                icon={Gavel}
+                href="/auctions"
+                loading={summary.isLoading}
+                hint={`${data?.openAuctions ?? 0} open auction(s)`}
+              />
             </div>
-          )}
-        </Panel>
 
-        {/* Ageing */}
-        <Panel>
-          <PanelHeader
-            title="Vehicle ageing"
-            subtitle={
-              ageing.data
-                ? `${ageing.data.totalVehicles} on site · average ${ageing.data.averageAgeDays} days · oldest ${ageing.data.oldestAgeDays} days`
-                : undefined
+            <FinancierExposure
+              rows={revenue.data?.byFinancier ?? []}
+              loading={revenue.isLoading}
+              error={revenue.error}
+              onRetry={() => void revenue.refetch()}
+              canSeeFinanciers={!user?.financierId}
+            />
+          </div>
+        </Section>
+
+        {/* ---------- Capacity and ageing ------------------------------ */}
+        <div className="grid gap-5 xl:grid-cols-2">
+          <Section title="Yard capacity" description="Zone by zone, from live occupancy">
+            <Panel padded={false}>
+              {occupancy.isLoading ? (
+                <SkeletonRows rows={5} />
+              ) : occupancy.isError ? (
+                <ErrorState
+                  title="Capacity could not be loaded"
+                  onRetry={() => void occupancy.refetch()}
+                />
+              ) : (occupancy.data?.sites.length ?? 0) === 0 ? (
+                <EmptyState icon={Building2} title="No sites within your access" />
+              ) : (
+                <div className="divide-y divide-line">
+                  {occupancy.data?.sites
+                    .filter((site) => !siteId || site.siteId === siteId)
+                    .map((site) => (
+                      <SiteCapacity key={site.siteId} site={site} />
+                    ))}
+                </div>
+              )}
+            </Panel>
+          </Section>
+
+          <Section title="Ageing profile" description="How long vehicles have been on site">
+            <Panel padded={false}>
+              {ageing.isLoading ? (
+                <SkeletonRows rows={5} />
+              ) : ageing.isError ? (
+                <ErrorState title="Ageing could not be loaded" onRetry={() => void ageing.refetch()} />
+              ) : (ageing.data?.totalVehicles ?? 0) === 0 ? (
+                <EmptyState icon={Clock} title="No vehicles on site" />
+              ) : (
+                <div className="p-4">
+                  <AgeingBuckets
+                    buckets={ageing.data!.buckets}
+                    total={ageing.data!.totalVehicles}
+                  />
+                  <dl className="mt-4 grid grid-cols-3 gap-3 border-t border-line pt-3">
+                    <div>
+                      <dt className="text-2xs uppercase tracking-wider text-ink-3">On site</dt>
+                      <dd className="tabular mt-0.5 text-sm font-semibold text-ink">
+                        {ageing.data!.totalVehicles}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-2xs uppercase tracking-wider text-ink-3">Average age</dt>
+                      <dd className="tabular mt-0.5 text-sm font-semibold text-ink">
+                        {formatAgeing(Math.round(ageing.data!.averageAgeDays))}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-2xs uppercase tracking-wider text-ink-3">Oldest</dt>
+                      <dd className="mt-0.5">
+                        <Age days={ageing.data!.oldestAgeDays} />
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+              )}
+            </Panel>
+          </Section>
+        </div>
+
+        {/* ---------- Queues ------------------------------------------- */}
+        <div className="grid gap-5 xl:grid-cols-2">
+          <Section
+            title="Longest-standing vehicles"
+            description="Oldest first — the disposal candidates"
+            action={
+              <Link href="/yard" className="text-2xs text-blue-strong hover:underline">
+                Open live yard
+              </Link>
             }
-            icon={Clock}
-          />
-          {ageing.isLoading ? (
-            <SkeletonRows rows={4} />
-          ) : (ageing.data?.totalVehicles ?? 0) === 0 ? (
-            <EmptyState title="No vehicles on site" description="Ageing is measured across vehicles currently in a yard." />
-          ) : (
-            <div className="h-56">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={ageing.data?.buckets ?? []} margin={{ top: 6, right: 8, bottom: 0, left: -20 }}>
-                  <CartesianGrid stroke="#1e2c48" strokeDasharray="3 3" vertical={false} />
-                  <XAxis
-                    dataKey="label"
-                    tick={{ fill: '#64748b', fontSize: 10 }}
-                    tickLine={false}
-                    axisLine={{ stroke: '#1e2c48' }}
-                  />
-                  <YAxis tick={{ fill: '#64748b', fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} />
-                  <Tooltip
-                    cursor={{ fill: 'rgba(255,255,255,0.03)' }}
-                    contentStyle={{
-                      background: '#0f1729',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      borderRadius: 8,
-                      fontSize: 12,
-                    }}
-                  />
-                  <Bar dataKey="count" fill="#f59e0b" radius={[3, 3, 0, 0]} name="Vehicles" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </Panel>
-      </div>
-
-      <div className="grid gap-3 lg:grid-cols-2">
-        {/* Occupancy */}
-        <Panel padded={false}>
-          <div className="px-4 pt-4">
-            <PanelHeader title="Site occupancy" icon={Building2} />
-          </div>
-          {occupancy.isLoading ? (
-            <SkeletonRows rows={4} />
-          ) : (occupancy.data?.sites.length ?? 0) === 0 ? (
-            <EmptyState title="No sites in scope" description="You do not have access to any site yet." />
-          ) : (
-            <ul className="divide-y divide-white/5">
-              {occupancy.data?.sites.map((site) => (
-                <li key={site.siteId} className="px-4 py-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-slate-200">{site.siteName}</p>
-                      <p className="mt-0.5 text-2xs text-muted-500">
-                        {site.siteCode} · {site.status.toLowerCase()}
-                        {site.parkingMode === 'PUBLIC_PARKING' ? ' · Phase 2' : ''}
-                      </p>
-                    </div>
-                    <p className="shrink-0 font-mono text-sm tabular-nums text-slate-300">
-                      {site.occupied}
-                      <span className="text-muted-600">/{site.capacity}</span>
-                    </p>
-                  </div>
-                  <UtilisationBar percent={site.utilisationPercent} className="mt-2" />
-                  {site.zones.length > 0 ? (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {site.zones.map((zone) => (
-                        <span
-                          key={zone.zoneId}
-                          className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-2xs text-muted-400"
-                          title={zone.name}
-                        >
-                          {zone.code} {zone.occupied}/{zone.capacity}
+          >
+            <Panel padded={false}>
+              {oldest.isLoading ? (
+                <SkeletonRows rows={5} />
+              ) : (oldest.data?.items.length ?? 0) === 0 ? (
+                <EmptyState icon={Truck} title="No vehicles currently on site" />
+              ) : (
+                <ul className="divide-y divide-line">
+                  {oldest.data?.items.map((session) => (
+                    <li key={session.id}>
+                      <Link
+                        href={`/vehicles/${session.vehicleId}`}
+                        className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-surface-2"
+                      >
+                        <VehicleIdentifier
+                          plate={session.registrationNumber}
+                          make={session.make}
+                          model={session.model}
+                          className="min-w-0 flex-1"
+                        />
+                        <span className="hidden shrink-0 text-2xs text-ink-3 sm:block">
+                          {session.siteName}
                         </span>
-                      ))}
-                    </div>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
+                        <Age days={session.ageingDays} />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Panel>
+          </Section>
 
-        {/* Receivables by financier */}
-        <Panel padded={false}>
-          <div className="px-4 pt-4">
-            <PanelHeader
-              title="Receivables by financier"
-              subtitle={
-                revenue.data
-                  ? `${formatMoney(revenue.data.outstandingAmount)} outstanding across ${revenue.data.outstandingCount} invoice(s)`
-                  : undefined
-              }
-              icon={Banknote}
-            />
-          </div>
-          {revenue.isLoading ? (
-            <SkeletonRows rows={4} />
-          ) : (revenue.data?.byFinancier.length ?? 0) === 0 ? (
-            <EmptyState
-              title="No invoices raised yet"
-              description="Receivables appear once stays are released and invoiced."
-            />
-          ) : (
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Financier</th>
-                  <th className="text-right">Invoices</th>
-                  <th className="text-right">Invoiced</th>
-                  <th className="text-right">Outstanding</th>
-                </tr>
-              </thead>
-              <tbody>
-                {revenue.data?.byFinancier.map((row) => (
-                  <tr key={row.financierId}>
-                    <td className="max-w-[12rem] truncate">{row.financierName}</td>
-                    <td className="text-right font-mono tabular-nums text-muted-400">{row.invoiceCount}</td>
-                    <td className="text-right font-mono tabular-nums">{formatMoneyCompact(row.invoicedAmount)}</td>
-                    <td
-                      className={
-                        Number(row.outstandingAmount) > 0
-                          ? 'text-right font-mono tabular-nums text-warn-400'
-                          : 'text-right font-mono tabular-nums text-muted-500'
-                      }
-                    >
-                      {formatMoneyCompact(row.outstandingAmount)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          <div className="border-t border-white/5 px-4 py-2">
-            <Link href="/billing" className="text-2xs text-accent-400 hover:text-accent-300">
-              Open billing →
+          <Section
+            title="Release queue"
+            description="Vehicles waiting to leave, and what is blocking them"
+          >
+            <Panel padded={false}>
+              {pendingReleases.isLoading ? (
+                <SkeletonRows rows={5} />
+              ) : (pendingReleases.data?.items.length ?? 0) === 0 ? (
+                <EmptyState
+                  icon={LogOut}
+                  title="Nothing waiting to leave"
+                  description="Releases appear here from request until the vehicle is off site."
+                />
+              ) : (
+                <ul className="divide-y divide-line">
+                  {pendingReleases.data?.items.map((release) => (
+                    <li key={release.id}>
+                      <Link
+                        href={`/yard/${release.sessionId}`}
+                        className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-surface-2"
+                      >
+                        <VehicleIdentifier
+                          plate={release.registrationNumber}
+                          className="min-w-0 flex-1"
+                        />
+                        <StatusBadge status={release.status} size="sm" />
+                        <ArrowRight className="h-3.5 w-3.5 shrink-0 text-ink-3" aria-hidden />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Panel>
+          </Section>
+        </div>
+
+        {/* ---------- Gate activity ------------------------------------ */}
+        <Section
+          title="Recent gate activity"
+          action={
+            <Link href="/gate" className="text-2xs text-blue-strong hover:underline">
+              Open gate
             </Link>
-          </div>
-        </Panel>
+          }
+        >
+          <Panel padded={false}>
+            {recent.isLoading ? (
+              <SkeletonRows rows={4} />
+            ) : (recent.data?.items.length ?? 0) === 0 ? (
+              <EmptyState icon={Radio} title="No movements recorded yet" />
+            ) : (
+              <ul className="divide-y divide-line">
+                {recent.data?.items.map((session) => {
+                  const exited = Boolean(session.exitAt);
+                  return (
+                    <li key={session.id}>
+                      <Link
+                        href={`/vehicles/${session.vehicleId}`}
+                        className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-surface-2"
+                      >
+                        {exited ? (
+                          <LogOut className="h-4 w-4 shrink-0 text-slate" aria-hidden />
+                        ) : (
+                          <LogIn className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+                        )}
+                        <VehicleIdentifier
+                          plate={session.registrationNumber}
+                          className="min-w-0 flex-1"
+                        />
+                        <span className="hidden shrink-0 text-2xs text-ink-3 md:block">
+                          {session.siteName}
+                        </span>
+                        <span className="tabular shrink-0 text-2xs text-ink-3">
+                          {formatRelative(session.exitAt ?? session.entryAt)}
+                        </span>
+                        <StatusBadge status={session.status} size="sm" />
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </Panel>
+        </Section>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+
+function SiteCapacity({
+  site,
+}: {
+  site: {
+    siteId: string;
+    siteCode: string;
+    siteName: string;
+    capacity: number;
+    occupied: number;
+    available: number;
+    utilisationPercent: number;
+    zones: Array<{
+      zoneId: string;
+      code: string;
+      name: string;
+      capacity: number;
+      occupied: number;
+      available: number;
+      utilisationPercent: number;
+    }>;
+  };
+}) {
+  return (
+    <div className="p-4">
+      <div className="flex items-baseline justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium text-ink">{site.siteName}</p>
+          <p className="text-2xs text-ink-3">{site.siteCode}</p>
+        </div>
+        <p className="tabular shrink-0 text-xs text-ink-2">
+          <span className="font-semibold text-ink">{site.occupied}</span>
+          <span className="text-ink-3"> / {site.capacity}</span>
+        </p>
       </div>
 
-      <p className="px-1 pb-2 text-2xs leading-relaxed text-muted-600">
-        All monetary values are computed server-side by the charge engine. Rates and tax are
-        development placeholders pending Sri JP finance sign-off (open items OI-02, OI-03, OI-05).
-      </p>
+      <div className="mt-3 space-y-2.5">
+        {site.zones.length === 0 ? (
+          <p className="text-2xs text-ink-3">No zones configured.</p>
+        ) : (
+          site.zones.map((zone) => (
+            <div key={zone.zoneId}>
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="truncate text-xs text-ink-2">
+                  <span className="identifier text-ink-3">{zone.code}</span> {zone.name}
+                </span>
+                <span className="tabular shrink-0 text-2xs text-ink-3">
+                  {zone.occupied}/{zone.capacity} · {zone.utilisationPercent.toFixed(0)}%
+                </span>
+              </div>
+              <CapacityBar
+                className="mt-1"
+                occupied={zone.occupied}
+                available={zone.available}
+              />
+            </div>
+          ))
+        )}
+      </div>
     </div>
+  );
+}
+
+function AgeingBuckets({
+  buckets,
+  total,
+}: {
+  buckets: Array<{ label: string; minDays: number; maxDays: number | null; count: number }>;
+  total: number;
+}) {
+  const max = Math.max(1, ...buckets.map((bucket) => bucket.count));
+
+  return (
+    <ul className="space-y-2">
+      {buckets.map((bucket) => {
+        // Severity follows the bucket's own lower bound, so the bar and the
+        // ageing badge elsewhere in the console cannot disagree.
+        const tone =
+          bucket.minDays > 30
+            ? 'bg-danger'
+            : bucket.minDays > 15
+              ? 'bg-amber'
+              : bucket.minDays > 7
+                ? 'bg-blue'
+                : 'bg-primary';
+
+        return (
+          <li key={bucket.label}>
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-xs text-ink-2">{bucket.label}</span>
+              <span className="tabular text-2xs text-ink-3">
+                {bucket.count}
+                {total > 0 ? ` · ${((bucket.count / total) * 100).toFixed(0)}%` : ''}
+              </span>
+            </div>
+            <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-surface-3">
+              <div
+                className={`h-full rounded-full ${tone}`}
+                style={{ width: `${(bucket.count / max) * 100}%` }}
+              />
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function FinancierExposure({
+  rows,
+  loading,
+  error,
+  onRetry,
+  canSeeFinanciers,
+}: {
+  rows: Array<{
+    financierId: string;
+    financierName: string;
+    invoiceCount: number;
+    invoicedAmount: string;
+    outstandingAmount: string;
+  }>;
+  loading: boolean;
+  error: unknown;
+  onRetry: () => void;
+  canSeeFinanciers: boolean;
+}) {
+  const ranked = React.useMemo(
+    () =>
+      [...rows]
+        .sort((a, b) => Number(b.outstandingAmount) - Number(a.outstandingAmount))
+        .slice(0, 8),
+    [rows],
+  );
+
+  const peak = Math.max(1, ...ranked.map((row) => Number(row.outstandingAmount)));
+
+  return (
+    <Panel padded={false}>
+      <div className="px-4 pt-4">
+        <PanelHeader
+          title={canSeeFinanciers ? 'Outstanding by financier' : 'Your outstanding balance'}
+          subtitle="Highest exposure first"
+          icon={Building2}
+        />
+      </div>
+
+      {loading ? (
+        <SkeletonRows rows={5} />
+      ) : error ? (
+        <ErrorState title="Exposure could not be loaded" onRetry={onRetry} />
+      ) : ranked.length === 0 ? (
+        <EmptyState
+          icon={Receipt}
+          title="Nothing outstanding"
+          description="Every issued invoice has been settled."
+        />
+      ) : (
+        <ul className="divide-y divide-line">
+          {ranked.map((row) => (
+            <li key={row.financierId} className="px-4 py-2.5">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="min-w-0 flex-1 truncate text-xs text-ink-2">
+                  {row.financierName}
+                </span>
+                <Money amount={row.outstandingAmount} intent="outstanding" size="sm" />
+              </div>
+              <div className="mt-1 flex items-center gap-2">
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-3">
+                  <div
+                    className="h-full rounded-full bg-amber"
+                    style={{ width: `${(Number(row.outstandingAmount) / peak) * 100}%` }}
+                  />
+                </div>
+                <span className="tabular shrink-0 text-2xs text-ink-3">
+                  {row.invoiceCount} inv
+                </span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
   );
 }
