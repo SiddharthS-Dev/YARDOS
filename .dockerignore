@@ -1,0 +1,33 @@
+# Never ship dependencies, build output or local state into the build context.
+node_modules
+**/node_modules
+dist
+**/dist
+.next
+**/.next
+coverage
+**/coverage
+
+# Secrets. The image must never contain a credential.
+.env
+.env.*
+!.env.example
+
+# Local state
+var/
+.storage/
+logs/
+*.log
+
+# Tooling
+.git
+.github
+.vscode
+.idea
+docs
+*.md
+!apps/web/README.md
+
+# Test output
+test-results
+playwright-report
