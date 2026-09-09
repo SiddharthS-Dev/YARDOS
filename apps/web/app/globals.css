@@ -1,0 +1,92 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * YARDOS console base styles.
+ *
+ * The console is dark-only by design. This is an operational tool used for
+ * whole shifts, frequently on screens behind glass in bright yards; a
+ * near-black ground with restrained contrast is easier on the eyes than a
+ * white one, and it makes the status colours legible at a glance.
+ */
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-base-950 text-slate-300 antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  /* Numbers line up in columns. Essential for money and counts. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    @apply bg-accent-500/30 text-white;
+  }
+
+  /* A slim scrollbar, so dense panels do not lose width to chrome. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(41 58 92) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-base-600;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    @apply bg-base-500;
+  }
+
+  /* Focus is always visible. An operator working by keyboard must be able to
+     see where they are. */
+  :focus-visible {
+    @apply outline-none ring-2 ring-accent-400 ring-offset-2 ring-offset-base-950;
+  }
+}
+
+@layer components {
+  /* Dense operational table. Used by every list screen. */
+  .data-table {
+    @apply w-full border-collapse text-sm;
+  }
+  .data-table thead th {
+    @apply sticky top-0 z-10 border-b border-white/5 bg-base-850 px-3 py-2 text-left
+           text-2xs font-semibold uppercase tracking-wider text-muted-500;
+  }
+  .data-table tbody td {
+    @apply border-b border-white/[0.03] px-3 py-2.5 align-middle text-slate-300;
+  }
+  .data-table tbody tr {
+    @apply transition-colors;
+  }
+  .data-table tbody tr:hover {
+    @apply bg-white/[0.025];
+  }
+
+  /* Form controls */
+  .input {
+    @apply w-full rounded-md border-0 bg-base-900 px-3 py-2 text-sm text-slate-200
+           ring-1 ring-inset ring-white/10 placeholder:text-muted-600
+           focus:ring-2 focus:ring-inset focus:ring-accent-400;
+  }
+  .label {
+    @apply mb-1 block text-2xs font-medium uppercase tracking-wider text-muted-500;
+  }
+}
