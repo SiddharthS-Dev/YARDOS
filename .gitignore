@@ -45,3 +45,6 @@ Thumbs.db
 
 # Prisma
 apps/api/prisma/*.db
+
+# Local run scripts
+.run/

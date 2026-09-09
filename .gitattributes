@@ -4,6 +4,12 @@
 # Shell scripts must keep LF or they break inside containers.
 *.sh text eol=lf
 
+# Windows batch files must keep CRLF. With LF endings cmd cannot resolve a
+# `call :label` and aborts with "The system cannot find the batch label
+# specified" - so the repo-wide eol=lf above would ship broken scripts.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
 # Generated, and noisy in diffs.
 package-lock.json linguist-generated=true -diff
 
