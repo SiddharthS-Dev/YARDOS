@@ -12,6 +12,7 @@ import {
   ChevronsRight,
   Gavel,
   LayoutDashboard,
+  KeyRound,
   LogOut,
   Menu,
   Moon,
@@ -601,6 +602,15 @@ function UserMenu({
               </p>
             ) : null}
           </div>
+
+          <Link
+            href="/account/password"
+            role="menuitem"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink"
+          >
+            <KeyRound className="h-4 w-4" aria-hidden />
+            Change password
+          </Link>
 
           <button
             type="button"
