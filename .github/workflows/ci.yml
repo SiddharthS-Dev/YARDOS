@@ -1,0 +1,335 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# A new push to the same branch cancels the previous run: there is no value in
+# finishing CI for a commit that has already been superseded.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Static analysis. Fast, no services, fails the run early.
+  # ---------------------------------------------------------------------------
+  static:
+    name: Typecheck and lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      # The API and console both import the compiled contracts package, so it
+      # must be built before anything can typecheck.
+      - name: Build shared contracts
+        run: npm run build --workspace=@smartpark/contracts
+
+      # Prisma Client is generated code. Without it the API does not typecheck.
+      - name: Generate Prisma Client
+        run: npx prisma generate --schema apps/api/prisma/schema.prisma
+
+      - name: Typecheck API
+        run: npx tsc -p apps/api/tsconfig.json --noEmit
+
+      - name: Typecheck seed
+        run: npx tsc -p apps/api/prisma/tsconfig.seed.json --noEmit
+
+      - name: Typecheck console
+        run: npx tsc -p apps/web/tsconfig.json --noEmit
+
+      - name: Lint API
+        run: npm run lint --workspace=@smartpark/api
+
+  # ---------------------------------------------------------------------------
+  # Unit tests. Pure domain logic - no database, no container.
+  # ---------------------------------------------------------------------------
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build --workspace=@smartpark/contracts
+      - run: npx prisma generate --schema apps/api/prisma/schema.prisma
+
+      - name: Run unit tests with coverage
+        run: npm run test:cov --workspace=@smartpark/api
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: apps/api/coverage
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # Database-backed tests against real PostgreSQL and Redis.
+  #
+  # Uses throwaway service containers with throwaway credentials. CI never sees
+  # a production secret, and the secrets used here are deliberately visible -
+  # they protect nothing.
+  # ---------------------------------------------------------------------------
+  integration:
+    name: Migrations, integration and e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: smartpark
+          POSTGRES_PASSWORD: ci_throwaway_password
+          POSTGRES_DB: smartpark_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U smartpark -d smartpark_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://smartpark:ci_throwaway_password@localhost:5432/smartpark_ci?schema=public
+      REDIS_URL: redis://localhost:6379
+      # Throwaway. Long enough to satisfy the config validator, secret to nobody.
+      JWT_ACCESS_SECRET: ci-access-secret-not-a-real-credential-000000000
+      JWT_REFRESH_SECRET: ci-refresh-secret-not-a-real-credential-00000000
+      ENCRYPTION_KEY: Y2ktdGhyb3dhd2F5LTMyLWJ5dGUta2V5LTAwMDAwMDA=
+      CORS_ORIGINS: http://localhost:3001
+      # Tests must observe the full effect of an operation synchronously, and
+      # must not depend on object storage being reachable.
+      QUEUE_DRIVER: inline
+      OBJECT_STORAGE_DRIVER: filesystem
+      OBJECT_STORAGE_LOCAL_PATH: ./var/ci-storage
+      LOG_LEVEL: error
+      LOG_PRETTY: 'false'
+      SEED_ADMIN_PASSWORD: CiSeed!Admin2025
+      SEED_DEFAULT_PASSWORD: CiSeed!Demo2025
+      SEED_VEHICLE_COUNT: '40'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build --workspace=@smartpark/contracts
+      - run: npx prisma generate --schema apps/api/prisma/schema.prisma
+
+      # Applying migrations from scratch every run is itself a test: it proves
+      # the migration history is replayable on an empty database, which is what
+      # a production deploy actually does.
+      - name: Apply migrations
+        working-directory: apps/api
+        run: npx prisma migrate deploy
+
+      - name: Verify no schema drift
+        working-directory: apps/api
+        run: |
+          # `migrate diff` exits 2 when the migrated database and the schema
+          # disagree, which means someone edited schema.prisma without adding a
+          # migration.
+          npx prisma migrate diff \
+            --from-schema-datasource prisma/schema.prisma \
+            --to-schema-datamodel prisma/schema.prisma \
+            --exit-code || (echo "::error::schema.prisma has drifted from the migration history" && exit 1)
+
+      - name: Seed demo data
+        working-directory: apps/api
+        run: npx ts-node -P prisma/tsconfig.seed.json -r tsconfig-paths/register --transpile-only prisma/seed.ts
+
+      - name: Build API
+        run: npm run build --workspace=@smartpark/api
+
+      - name: Integration tests
+        run: npm run test:integration --workspace=@smartpark/api
+
+      - name: End-to-end tests
+        run: npm run test:e2e --workspace=@smartpark/api
+
+  # ---------------------------------------------------------------------------
+  # Console build. Separate because it is slow and independent of the database.
+  # ---------------------------------------------------------------------------
+  web:
+    name: Console build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build --workspace=@smartpark/contracts
+
+      - name: Build console
+        run: npm run build --workspace=@smartpark/web
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+
+  # ---------------------------------------------------------------------------
+  # Security checks.
+  # ---------------------------------------------------------------------------
+  security:
+    name: Security checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+
+      # High and critical advisories fail the build. Moderate and low are
+      # reported but do not block, because a hard failure on every transitive
+      # low-severity advisory trains people to ignore the job.
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+
+      # A committed .env is the single most common way a real credential
+      # escapes. It is git-ignored; this asserts that nobody forced it in.
+      - name: Assert no committed secrets
+        run: |
+          if git ls-files --error-unmatch .env >/dev/null 2>&1; then
+            echo "::error::.env is tracked by git. It must never be committed."
+            exit 1
+          fi
+          if git ls-files | grep -qE '\.(pem|key|p12|pfx)$'; then
+            echo "::error::A key or certificate file is tracked by git."
+            exit 1
+          fi
+          echo "No secret files are tracked."
+
+      # The production safety guard is what stops a mock provider or a template
+      # secret reaching production. It is asserted by unit tests
+      # (src/config/configuration.spec.ts); run them here too so a weakening of
+      # the guard fails the security job and not only the unit job.
+      - name: Assert production safety guard rejects unsafe config
+        run: |
+          npm run build --workspace=@smartpark/contracts
+          npx prisma generate --schema apps/api/prisma/schema.prisma
+          npm run test:unit --workspace=@smartpark/api -- --testPathPattern "config/configuration.spec"
+
+      # .env.example is documentation, so it must never carry a usable
+      # credential - and it must keep carrying the placeholders the guard
+      # rejects, otherwise the guard has nothing to catch.
+      - name: Assert .env.example contains only placeholders
+        run: |
+          placeholders="
+          replace-me-with-a-48-byte-random-value-access-0000
+          replace-me-with-a-48-byte-random-value-refresh-000
+          cmVwbGFjZS1tZS0zMi1ieXRlLWtleS1iYXNlNjQtMDAwMDA=
+          "
+          for placeholder in $placeholders; do
+            if ! grep -qF "$placeholder" .env.example; then
+              echo "::error::.env.example no longer contains the placeholder $placeholder"
+              exit 1
+            fi
+          done
+          echo ".env.example holds placeholders only."
+
+  # ---------------------------------------------------------------------------
+  # Container images. Only after everything else is green.
+  # ---------------------------------------------------------------------------
+  containers:
+    name: Container images
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [static, unit, web]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/api.Dockerfile
+          push: false
+          load: true
+          tags: smartpark-api:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build console image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/web.Dockerfile
+          push: false
+          load: true
+          tags: smartpark-web:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # An image that runs as root is a finding in any container review.
+      - name: Assert images run as non-root
+        run: |
+          for image in smartpark-api:ci smartpark-web:ci; do
+            uid=$(docker run --rm --entrypoint sh "$image" -c 'id -u')
+            if [ "$uid" = "0" ]; then
+              echo "::error::$image runs as root"
+              exit 1
+            fi
+            echo "$image runs as uid $uid"
+          done
+
+      - name: Assert no secrets baked into the images
+        run: |
+          for image in smartpark-api:ci smartpark-web:ci; do
+            if docker run --rm --entrypoint sh "$image" -c 'ls -a /app/.env 2>/dev/null'; then
+              echo "::error::$image contains a .env file"
+              exit 1
+            fi
+          done
+          echo "No .env present in either image."

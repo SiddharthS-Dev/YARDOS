@@ -1,4 +1,5 @@
 import { execSync } from 'node:child_process';
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 /**
@@ -46,8 +47,6 @@ export default async function globalSetup(): Promise<void> {
 
 /** Loads the repository-root .env without adding a dotenv dependency here. */
 function loadRootEnv(): void {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const fs = require('node:fs') as typeof import('node:fs');
   const envPath = path.resolve(__dirname, '../../../../.env');
   if (!fs.existsSync(envPath)) return;
 
