@@ -4,6 +4,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { AuthProvider } from '@/lib/auth-context';
+import { SiteProvider } from '@/lib/site-context';
+import { ThemeProvider } from '@/lib/theme';
+import { ToastProvider } from '@/components/ui/toast';
 import { ApiError } from '@/lib/api';
 
 /**
@@ -37,7 +40,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>{children}</AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          {/* Site context depends on auth (it reads the caller's own scoped
+              occupancy) and on the query client, so it nests inside both. */}
+          <SiteProvider>
+            <ToastProvider>{children}</ToastProvider>
+          </SiteProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }
