@@ -110,6 +110,95 @@ describe('FinancierMatcherService', () => {
     });
   });
 
+  describe('prefix matching', () => {
+    it('matches when the registry value extends a known alias', async () => {
+      // "NORTHBRIDGEVEHICLEFINANCE" against
+      // "NORTHBRIDGEVEHICLEFINANCELIMITED" - a prefix relationship is strong
+      // evidence, scored above containment.
+      const tx = stubPrisma({
+        aliases: [
+          {
+            alias: 'MERIDIAN AUTO',
+            normalizedAlias: normalizeCompanyName('MERIDIAN AUTO'),
+            financierId: 'fin-meridian',
+            displayName: 'Meridian Auto Loans',
+          },
+        ],
+      });
+
+      const result = await matcher.match(tx, 'org-1', 'Meridian Auto Loans Private Limited');
+
+      expect(result.financierId).toBe('fin-meridian');
+      expect(result.confidence).toBeGreaterThanOrEqual(0.95);
+      expect(result.explanation).toMatch(/prefix/i);
+    });
+
+    it('matches when a known alias extends the registry value', async () => {
+      // The relationship holds in both directions: the registry may be the
+      // abbreviated side.
+      const tx = stubPrisma({
+        aliases: [
+          {
+            alias: 'KAVERI COMMERCIAL CREDIT LIMITED',
+            normalizedAlias: normalizeCompanyName('KAVERI COMMERCIAL CREDIT LIMITED'),
+            financierId: 'fin-kaveri',
+            displayName: 'Kaveri Commercial Credit',
+          },
+        ],
+      });
+
+      const result = await matcher.match(tx, 'org-1', 'Kaveri Commercial');
+
+      expect(result.financierId).toBe('fin-kaveri');
+      expect(result.confidence).toBeGreaterThanOrEqual(0.95);
+    });
+
+    it('prefers the stronger match when several aliases apply', async () => {
+      // One alias is contained in the input, another is a prefix of it. The
+      // prefix scores higher and must win regardless of row order.
+      const tx = stubPrisma({
+        aliases: [
+          {
+            alias: 'CAPITAL',
+            normalizedAlias: normalizeCompanyName('CAPITAL'),
+            financierId: 'fin-weak',
+            displayName: 'Generic Capital',
+          },
+          {
+            alias: 'EVEREST RETAIL',
+            normalizedAlias: normalizeCompanyName('EVEREST RETAIL'),
+            financierId: 'fin-everest',
+            displayName: 'Everest Retail Finance',
+          },
+        ],
+      });
+
+      const result = await matcher.match(tx, 'org-1', 'Everest Retail Capital Finance Limited');
+
+      expect(result.financierId).toBe('fin-everest');
+      expect(result.confidence).toBeGreaterThanOrEqual(0.95);
+    });
+
+    it('ignores an alias too short to be evidence of anything', async () => {
+      // A three-character alias would match half the register by containment.
+      const tx = stubPrisma({
+        aliases: [
+          {
+            alias: 'ABC',
+            normalizedAlias: normalizeCompanyName('ABC'),
+            financierId: 'fin-abc',
+            displayName: 'ABC',
+          },
+        ],
+        financiers: [],
+      });
+
+      const result = await matcher.match(tx, 'org-1', 'ABC Vehicle Finance Limited');
+
+      expect(result.financierId).toBeNull();
+    });
+  });
+
   describe('token-overlap suggestions', () => {
     it('suggests but never auto-accepts', async () => {
       const tx = stubPrisma({

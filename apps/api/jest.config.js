@@ -52,19 +52,33 @@ module.exports = {
       testMatch: ['<rootDir>/test/e2e/**/*.spec.ts'],
     },
   ],
+  // Coverage is collected over the code the UNIT suite is responsible for:
+  // pure, deterministic logic that needs no database. That is a deliberate
+  // scope, not a convenience.
+  //
+  // The service and controller layers are absent because unit tests are the
+  // wrong instrument for them - they are gated instead by the integration and
+  // e2e projects, which exercise the real guards, transactions, constraints
+  // and triggers. Measuring them here produced a global figure that fell every
+  // time a well-tested service was added, and a number that punishes good work
+  // is a number people learn to ignore.
   collectCoverageFrom: [
-    'src/**/*.ts',
-    '!src/**/*.module.ts',
-    '!src/**/*.dto.ts',
-    '!src/main.ts',
-    '!src/worker.ts',
-    '!src/tooling/**',
+    'src/modules/billing/domain/**/*.ts',
+    'src/modules/shared/state-machine.ts',
+    'src/modules/financier/financier-matcher.service.ts',
+    'src/common/money/**/*.ts',
+    'src/config/configuration.ts',
+    '!src/**/*.spec.ts',
+    '!src/**/*.types.ts',
   ],
   coverageDirectory: 'coverage',
   coverageThreshold: {
-    global: { statements: 20, branches: 15, functions: 20, lines: 20 },
-    // The money paths carry the business risk, so they are held far higher.
+    global: { statements: 85, branches: 75, functions: 85, lines: 85 },
+    // The money paths carry the business risk, so they are held higher still.
     './src/modules/billing/domain/': {
+      statements: 90, branches: 80, functions: 90, lines: 90,
+    },
+    './src/common/money/': {
       statements: 90, branches: 80, functions: 90, lines: 90,
     },
   },
