@@ -39,7 +39,8 @@
   },
   "overrides": {
     "postcss": "^8.5.28",
-    "deepmerge-ts": "^8.0.2"
+    "deepmerge-ts": "^8.0.2",
+    "multer": "^2.3.0"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",
