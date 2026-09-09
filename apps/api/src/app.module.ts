@@ -21,7 +21,13 @@ import { BillingModule } from '@/modules/billing/billing.module';
 import { ContractModule } from '@/modules/contract/contract.module';
 import { FinancierModule } from '@/modules/financier/financier.module';
 import { IdentityModule } from '@/modules/identity/identity.module';
+import { AuctionModule } from '@/modules/auction/auction.module';
+import { InvoiceModule } from '@/modules/invoice/invoice.module';
 import { JobsModule } from '@/modules/jobs/jobs.module';
+import { PaymentModule } from '@/modules/payment/payment.module';
+import { ReleaseModule } from '@/modules/release/release.module';
+import { ReportingModule } from '@/modules/reporting/reporting.module';
+import { SettingsModule } from '@/modules/settings/settings.module';
 import { ParkingModule } from '@/modules/parking/parking.module';
 import { RegistryModule } from '@/modules/registry/registry.module';
 import { VehicleModule } from '@/modules/vehicle/vehicle.module';
@@ -56,6 +62,7 @@ import { JwtAuthGuard, PermissionsGuard } from '@/modules/identity/guards';
     QueueModule,
     OutboxModule,
     AuditModule,
+    SettingsModule,
 
     EventEmitterModule.forRoot({
       // Event names are dotted (`parking.session.opened`) so subscribers can
@@ -102,6 +109,11 @@ import { JwtAuthGuard, PermissionsGuard } from '@/modules/identity/guards';
     BillingModule,
     ParkingModule,
     AnprModule,
+    InvoiceModule,
+    PaymentModule,
+    ReleaseModule,
+    AuctionModule,
+    ReportingModule,
     JobsModule,
   ],
   providers: [
