@@ -162,16 +162,17 @@ jobs:
         working-directory: apps/api
         run: npx prisma migrate deploy
 
+      # Catches schema.prisma being edited without a matching migration.
+      #
+      # NOT a bare `prisma migrate diff --exit-code`: the integrity-guards
+      # migration adds trigram indexes, CHECK constraints and triggers that
+      # Prisma's datamodel cannot express, so that diff is permanently
+      # non-empty and would fail on every run - a check that is always red is
+      # a check nobody reads. The script ignores the GIN/GiST indexes the
+      # migrations deliberately create and fails on anything else.
       - name: Verify no schema drift
         working-directory: apps/api
-        run: |
-          # `migrate diff` exits 2 when the migrated database and the schema
-          # disagree, which means someone edited schema.prisma without adding a
-          # migration.
-          npx prisma migrate diff \
-            --from-schema-datasource prisma/schema.prisma \
-            --to-schema-datamodel prisma/schema.prisma \
-            --exit-code || (echo "::error::schema.prisma has drifted from the migration history" && exit 1)
+        run: node scripts/check-schema-drift.mjs
 
       - name: Seed demo data
         working-directory: apps/api
