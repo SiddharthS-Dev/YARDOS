@@ -24,6 +24,13 @@ async function bootstrap(): Promise<void> {
     bufferLogs: true,
     // The global filter owns every error response.
     abortOnError: false,
+    // Keeps the undecoded request bytes on `req.rawBody`. Signed callbacks
+    // (ANPR, payment gateway) MUST verify their HMAC against these bytes:
+    // re-serialising the parsed body with JSON.stringify produces a different
+    // byte sequence whenever the sender's key order, spacing or unicode
+    // escaping differs from Node's, so the signature would be checked against
+    // something the sender never signed.
+    rawBody: true,
   });
 
   const config = app.get<AppConfig>(APP_CONFIG);

@@ -9,13 +9,17 @@ import {
   ParseUUIDPipe,
   Post,
   Query,
+  RawBodyRequest,
+  Req,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { PaymentMethod, PaymentStatus } from '@prisma/client';
 import { ApiBearerAuth, ApiOperation, ApiPropertyOptional, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { IsEnum, IsOptional, IsString, IsUUID, Matches, MaxLength } from 'class-validator';
 
 import { HEADER_PAYMENT_SIGNATURE, Paginated, Permission } from '@smartpark/contracts';
 import { ApiErrorDto } from '@/common/dto/api-error.dto';
+import { rawBodyOf } from '@/common/util/raw-body';
 import { PaginationQueryDto } from '@/common/dto/pagination.dto';
 import {
   AuthenticatedUser,
@@ -153,12 +157,16 @@ export class PaymentController {
   @ApiResponse({ status: 401, description: 'Signature invalid.', type: ApiErrorDto })
   async webhook(
     @Body() payload: Record<string, unknown>,
+    @Req() request: RawBodyRequest<Request>,
     @Headers(HEADER_PAYMENT_SIGNATURE) signature?: string,
   ): Promise<{ processed: boolean; duplicate: boolean; paymentId: string | null; reason?: string }> {
     return this.payments.handleWebhook({
       payload,
-      // Signed over the exact bytes received.
-      rawBody: JSON.stringify(payload ?? {}),
+      // The exact bytes the gateway signed. Not a re-serialisation of the
+      // parsed body: `JSON.stringify` would reorder keys, drop the sender's
+      // whitespace and re-escape non-ASCII, and the HMAC would then be
+      // computed over a document the gateway never sent.
+      rawBody: rawBodyOf(request),
       signature,
     });
   }

@@ -9,7 +9,10 @@ import {
   ParseUUIDPipe,
   Post,
   Query,
+  RawBodyRequest,
+  Req,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { AnprEventStatus, TravelDirection } from '@prisma/client';
 import { Throttle } from '@nestjs/throttler';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
@@ -22,6 +25,7 @@ import {
 } from '@smartpark/contracts';
 import { AppException } from '@/common/errors/app-exception';
 import { ApiErrorDto } from '@/common/dto/api-error.dto';
+import { rawBodyOf } from '@/common/util/raw-body';
 import { PaginationQueryDto, paginate } from '@/common/dto/pagination.dto';
 import {
   AllowServiceAccount,
@@ -84,12 +88,14 @@ export class AnprController {
   @ApiResponse({ status: 404, description: 'Unknown device.', type: ApiErrorDto })
   async ingest(
     @Body() payload: Record<string, unknown>,
+    @Req() request: RawBodyRequest<Request>,
     @Headers(HEADER_ANPR_SIGNATURE) signature?: string,
     @Headers(HEADER_ANPR_TIMESTAMP) timestamp?: string,
   ): Promise<IngestResult> {
     return this.ingestion.ingest({
       payload,
-      rawBody: JSON.stringify(payload ?? {}),
+      // The bytes the camera signed, not a re-serialisation of them.
+      rawBody: rawBodyOf(request),
       signature,
       timestamp,
     });
