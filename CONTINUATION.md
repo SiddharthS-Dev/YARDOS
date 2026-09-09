@@ -224,3 +224,24 @@ In order:
 
 Do **not** start by rewriting architecture. Do not rebuild the charge engine.
 Do not make the gate wait on the registry.
+
+## Authentication (2026-09-09)
+
+Sign-in rebuilt on the design system with password visibility, code-based error
+mapping, session-expiry handling and a permission-derived landing route.
+`/account/password` added — `POST /auth/change-password` existed with no UI.
+
+Three defects fixed: logout left the query cache intact (a cross-tenant leak on
+a shared terminal); the post-login redirect was hard-coded to `/gate`; and the
+change-password endpoint was unreachable.
+
+**Not built, because no endpoint exists:** request access, invitation
+activation, forgot password, reset password. Catalogued with the schema and
+endpoints each would need in `docs/AUTH-BACKEND-GAPS.md`. The cheapest by far is
+GAP 4 — `mustChangePassword` is already set by the admin flows but is absent
+from `AuthenticatedUserProfile`, so the console cannot force a first-login
+change. One boolean.
+
+517 tests pass. See `docs/AUTH-UI-ARCHITECTURE.md` and
+`docs/AUTH-UI-IMPLEMENTATION.md`.
+

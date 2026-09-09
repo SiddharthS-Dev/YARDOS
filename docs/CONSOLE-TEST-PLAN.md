@@ -7,13 +7,14 @@ oversights.
 
 ## What exists today
 
-### Console unit tests — 97, Jest, `npm run test -w @smartpark/web`
+### Console unit tests — 135, Jest, `npm run test -w @smartpark/web`
 
 Scoped to `apps/web/lib/`: pure logic, no DOM, no new dependencies.
 
 | Module | Tests | Why it is worth testing |
 |---|---|---|
 | `lib/status.ts` | 45 | This map is why a stay, an invoice, a bid and a registry lookup look consistent. A mistake is invisible in review and wrong on **every** screen at once — showing green where the system said blocked is the misread that lets a vehicle leave when it should not have. Includes: unmapped statuses resolve to UNKNOWN rather than success; `AMBIGUOUS` never reads as matched; ageing severity escalates monotonically; the registry wording never claims a mock provider confirmed anything. |
+| `lib/auth-errors.ts` | 38 | Two of these are security properties, not niceties. **No account enumeration:** a wrong password and an unknown email must produce byte-identical messaging, and the mapping is asserted never to contain "not found", "no account" or similar. **No wrong landing:** a financier must never be routed to the estate dashboard, whose headline figures are not theirs. Also pinned: an unmapped backend code falls back to a generic message rather than surfacing the server's own words, every 5xx is reported as ours whatever its code, and the password-policy mirror matches `PasswordHasherService.validatePolicy` rule for rule. |
 | `lib/format.ts` | 52 | Indian lakh/crore grouping, plate normalisation, absent values. A mis-grouped amount is still a plausible number — nobody notices until a financier queries an invoice. Every renderer returns an em dash for missing input rather than `0`, `NaN` or `undefined`; rendering a missing balance as zero would tell an operator a vehicle owes nothing when the truth is that we do not know. |
 
 These run in CI in the `Console build` job, before the build.
@@ -43,7 +44,8 @@ into the tested `lib/` functions rather than living in JSX.
 *How to close it:* add `jest-environment-jsdom` and
 `@testing-library/react`, then test the components where the logic is not
 already in `lib/` — `CommandPalette` keyboard navigation, `AppShell` permission
-filtering, `ConfirmDialog` focus trapping.
+filtering, `ConfirmDialog` focus trapping, and the `PasswordField` toggle
+(that it is `type="button"` and cannot submit its form).
 
 ### Browser visual QA
 
@@ -99,7 +101,7 @@ accounts the API e2e suite already uses.
 ## Running the tests
 
 ```bash
-npm run test -w @smartpark/web        # console, 97, no services needed
+npm run test -w @smartpark/web        # console, 135, no services needed
 npm run test:unit -w @smartpark/api   # 288
 npm run test:integration -w @smartpark/api   # 49, needs the stack + seed
 npm run test:e2e -w @smartpark/api           # 45, needs the stack + seed

@@ -16,7 +16,8 @@ building and running it.
 | **Site context** | Site list derived from the caller-scoped occupancy report; switching invalidates the query cache | typecheck, build |
 | **Global search + command palette** | One surface, Cmd/Ctrl+K and `/`, plate-format-insensitive, keyboard navigable, permission-filtered commands | typecheck, build |
 | **Operations overview** | Control-room composition: attention KPIs → exposure → capacity → ageing → queues → gate activity. Every KPI links to the list behind it | **every request returns 200 against the running API with seeded data** |
-| **Console tests** | 97 Jest tests over the status vocabulary and formatters; wired into CI | `npm run test -w @smartpark/web` |
+| **Console tests** | 135 Jest tests over the status vocabulary, formatters and auth logic; wired into CI | `npm run test -w @smartpark/web` |
+| **Authentication** | Sign-in rebuilt, password visibility, code-based error mapping, session expiry, unauthorized state, permission-derived landing route, change-password screen | live API calls; see `AUTH-UI-IMPLEMENTATION.md` |
 
 ### Defects found and fixed during this work
 
@@ -40,7 +41,6 @@ still carry the previous visual language and structure.
 | `/auctions` | Functional | Board/list hybrid; bid ladder drawer |
 | `/vehicles` | Functional | `DataTable` with column visibility and saved filters |
 | `/portal` | Functional | Rework onto new components |
-| `/login` | Functional | Rework onto new tokens |
 
 **Compatibility layer still in use** — deleted as the above are reworked:
 `Badge`, `toneForStatus`, `MetricCard`, `UtilisationBar`, and the legacy colour
@@ -106,11 +106,11 @@ to a page that cannot load data is a dead button.
 
 | Suite | Tests | Covers |
 |---|---|---|
-| Console (Jest) | **97** | Status vocabulary, ageing severity, registry wording, money and plate formatting |
+| Console (Jest) | **135** | Status vocabulary, ageing severity, registry wording, money and plate formatting, auth error mapping, password policy, landing routes |
 | API unit | 288 | Charge engine, billing rules, duration, snapshots, money, config guard |
 | API integration | 49 | Financier isolation, plate normalisation, webhook signatures, idempotency |
 | API e2e | 45 | Full recovery lifecycle and auction disposal over HTTP |
 
-**479 tests total.** The console's screens are covered indirectly: the 45 e2e
+**517 tests total.** The console's screens are covered indirectly: the 45 e2e
 tests drive the same API the screens consume, so a contract change breaks the
 build or a test rather than only the UI.
