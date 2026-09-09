@@ -15,8 +15,11 @@ import type { Config } from 'tailwindcss';
  *
  *   **Colour carries meaning, never decoration.** `primary` is a successful or
  *   active state and the primary action; `amber` is attention; `blue` is
- *   informational; `slate` is blocked or unknown; `danger` is critical. Nothing
+ *   informational; `steel` is blocked or unknown; `danger` is critical. Nothing
  *   is coloured for emphasis alone.
+ *
+ * The semantic neutral is named `steel` rather than `slate` so it does not
+ * shadow Tailwind's own `slate` scale, which screens awaiting rework still use.
  *
  *   **Colour is never the only signal.** Every status renders colour, an icon
  *   and a word, so it survives greyscale, low contrast and colour blindness.
@@ -64,15 +67,66 @@ const config: Config = {
           strong: 'rgb(var(--blue-strong) / <alpha-value>)',
           soft: 'rgb(var(--blue-soft) / <alpha-value>)',
         },
-        slate: {
-          DEFAULT: 'rgb(var(--slate) / <alpha-value>)',
-          strong: 'rgb(var(--slate-strong) / <alpha-value>)',
-          soft: 'rgb(var(--slate-soft) / <alpha-value>)',
+        steel: {
+          DEFAULT: 'rgb(var(--steel) / <alpha-value>)',
+          strong: 'rgb(var(--steel-strong) / <alpha-value>)',
+          soft: 'rgb(var(--steel-soft) / <alpha-value>)',
         },
         danger: {
           DEFAULT: 'rgb(var(--danger) / <alpha-value>)',
           strong: 'rgb(var(--danger-strong) / <alpha-value>)',
           soft: 'rgb(var(--danger-soft) / <alpha-value>)',
+        },
+
+        /* ---------------------------------------------------------------
+         * Legacy aliases.
+         *
+         * The screens not yet reworked are written against the previous
+         * dark-only palette. Mapping those names onto the new tokens keeps
+         * them legible - and theme-aware - during the migration, instead of
+         * leaving them referencing colours Tailwind no longer emits, which
+         * would render them unstyled rather than merely dated.
+         *
+         * Deleted screen by screen as each is reworked; see
+         * docs/UI-IMPLEMENTATION-STATUS.md for what still depends on them.
+         * ------------------------------------------------------------- */
+        base: {
+          950: 'rgb(var(--ground) / <alpha-value>)',
+          900: 'rgb(var(--surface) / <alpha-value>)',
+          850: 'rgb(var(--surface-2) / <alpha-value>)',
+          800: 'rgb(var(--surface-3) / <alpha-value>)',
+          750: 'rgb(var(--surface-3) / <alpha-value>)',
+          700: 'rgb(var(--line) / <alpha-value>)',
+          600: 'rgb(var(--line-strong) / <alpha-value>)',
+          500: 'rgb(var(--line-strong) / <alpha-value>)',
+        },
+        accent: {
+          300: 'rgb(var(--blue) / <alpha-value>)',
+          400: 'rgb(var(--blue) / <alpha-value>)',
+          500: 'rgb(var(--blue) / <alpha-value>)',
+          600: 'rgb(var(--blue-strong) / <alpha-value>)',
+        },
+        ok: {
+          400: 'rgb(var(--primary) / <alpha-value>)',
+          500: 'rgb(var(--primary) / <alpha-value>)',
+          600: 'rgb(var(--primary-strong) / <alpha-value>)',
+        },
+        warn: {
+          400: 'rgb(var(--amber) / <alpha-value>)',
+          500: 'rgb(var(--amber) / <alpha-value>)',
+          600: 'rgb(var(--amber-strong) / <alpha-value>)',
+        },
+        info: {
+          400: 'rgb(var(--blue) / <alpha-value>)',
+          500: 'rgb(var(--blue) / <alpha-value>)',
+          600: 'rgb(var(--blue-strong) / <alpha-value>)',
+        },
+        muted: {
+          300: 'rgb(var(--ink-2) / <alpha-value>)',
+          400: 'rgb(var(--ink-2) / <alpha-value>)',
+          500: 'rgb(var(--ink-3) / <alpha-value>)',
+          600: 'rgb(var(--ink-3) / <alpha-value>)',
+          700: 'rgb(var(--line-strong) / <alpha-value>)',
         },
       },
       fontFamily: {

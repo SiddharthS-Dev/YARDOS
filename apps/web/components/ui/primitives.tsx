@@ -146,7 +146,7 @@ export function LiveDot({
         <span
           className={cn(
             'relative inline-flex h-2 w-2 rounded-full',
-            isLive ? 'bg-primary' : 'bg-slate',
+            isLive ? 'bg-primary' : 'bg-steel',
           )}
         />
       </span>
@@ -412,7 +412,7 @@ export function CapacityBar({
       aria-label={`${occupied} occupied, ${available} available${blocked ? `, ${blocked} blocked` : ''}`}
     >
       <div className="bg-primary" style={{ width: pct(occupied) }} />
-      {blocked > 0 ? <div className="bg-slate" style={{ width: pct(blocked) }} /> : null}
+      {blocked > 0 ? <div className="bg-steel" style={{ width: pct(blocked) }} /> : null}
       <div className="bg-transparent" style={{ width: pct(available) }} />
     </div>
   );
