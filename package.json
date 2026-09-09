@@ -37,6 +37,10 @@
     "stack:logs": "docker compose -f docker/docker-compose.yml logs -f",
     "stack:reset": "docker compose -f docker/docker-compose.yml down -v"
   },
+  "overrides": {
+    "postcss": "^8.5.28",
+    "deepmerge-ts": "^8.0.2"
+  },
   "devDependencies": {
     "concurrently": "^9.1.2",
     "typescript": "^5.7.3"

@@ -7,9 +7,10 @@
   "scripts": {
     "dev": "next dev -p 3001",
     "build": "next build",
-    "start": "next start -p 3001",
+    "start": "node .next/standalone/apps/web/server.js",
     "lint": "eslint \"{app,components,modules,lib,hooks}/**/*.{ts,tsx}\" --max-warnings=0",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "start:dev-server": "next start -p 3001"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
