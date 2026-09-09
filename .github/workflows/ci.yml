@@ -206,6 +206,12 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm run build --workspace=@smartpark/contracts
 
+      # The console's pure logic - the status vocabulary and the formatters.
+      # A mis-mapped status shows an operator green where the system said
+      # blocked, and neither needs a DOM to catch.
+      - name: Console tests
+        run: npm run test --workspace=@smartpark/web
+
       - name: Build console
         run: npm run build --workspace=@smartpark/web
         env:

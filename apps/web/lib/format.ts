@@ -108,7 +108,8 @@ export function formatAgeing(days: number | null | undefined): string {
   if (days < 30) return `${days} days`;
   const months = Math.floor(days / 30);
   const remainder = days % 30;
-  return remainder > 0 ? `${months}mo ${remainder}d` : `${months} months`;
+  if (remainder > 0) return `${months}mo ${remainder}d`;
+  return `${months} month${months === 1 ? '' : 's'}`;
 }
 
 /** SNAKE_CASE enum -> "Snake case", for labels. */
