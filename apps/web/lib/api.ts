@@ -50,19 +50,33 @@ export class ApiError extends Error {
 let accessToken: string | null = null;
 let refreshToken: string | null = null;
 
+/**
+ * Whether a session has existed at any point in this page's lifetime.
+ *
+ * Deliberately NOT reset by `clear()`. It answers "was there something to
+ * lose?", which is what separates an expiry worth interrupting the user about
+ * from an ordinary unauthenticated request on a cold load.
+ */
+let sessionEverEstablished = false;
+
 export const tokenStore = {
   load(): void {
     if (typeof window === 'undefined') return;
     accessToken = window.sessionStorage.getItem(ACCESS_KEY);
     refreshToken = window.sessionStorage.getItem(REFRESH_KEY);
+    if (accessToken || refreshToken) sessionEverEstablished = true;
   },
   set(access: string, refresh: string): void {
     accessToken = access;
     refreshToken = refresh;
+    sessionEverEstablished = true;
     if (typeof window !== 'undefined') {
       window.sessionStorage.setItem(ACCESS_KEY, access);
       window.sessionStorage.setItem(REFRESH_KEY, refresh);
     }
+  },
+  get hadSession(): boolean {
+    return sessionEverEstablished;
   },
   clear(): void {
     accessToken = null;
@@ -102,6 +116,27 @@ interface RequestOptions {
  */
 let refreshInFlight: Promise<boolean> | null = null;
 
+/**
+ * Why the last refresh failed. `reused` means the server treated the token as
+ * stolen and revoked the whole family, which deserves different wording from
+ * an ordinary expiry.
+ */
+let lastRefreshFailure: 'expired' | 'reused' = 'expired';
+
+/**
+ * Raised when a session has ended and could not be recovered.
+ *
+ * A DOM event rather than a callback because this module is deliberately
+ * framework-agnostic - it must not import React, the router, or the auth
+ * context. `AuthProvider` listens and handles the redirect.
+ */
+export const SESSION_EXPIRED_EVENT = 'yardos:session-expired';
+
+function announceSessionExpired(reason: 'expired' | 'reused'): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT, { detail: { reason } }));
+}
+
 async function performRefresh(): Promise<boolean> {
   const token = tokenStore.refresh;
   if (!token) return false;
@@ -113,6 +148,10 @@ async function performRefresh(): Promise<boolean> {
       body: JSON.stringify({ refreshToken: token }),
     });
     if (!response.ok) {
+      // A 401 carrying REFRESH_TOKEN_REUSED is the server reporting that this
+      // token had already been spent, so the family was revoked.
+      const body = (await response.json().catch(() => null)) as { code?: string } | null;
+      lastRefreshFailure = body?.code === 'REFRESH_TOKEN_REUSED' ? 'reused' : 'expired';
       tokenStore.clear();
       return false;
     }
@@ -160,11 +199,17 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
 
   // One refresh attempt, then replay. A second 401 means the session is
-  // genuinely over.
+  // genuinely over, and the application needs to know - otherwise every screen
+  // would have to detect expiry for itself.
   if (response.status === 401 && !options.skipRefresh) {
     const refreshed = await refreshOnce();
     if (refreshed) {
       response = await send();
+    } else if (tokenStore.hadSession) {
+      // Only announce expiry for a session that actually existed. A 401 on the
+      // very first call is "not signed in", which is an ordinary state, not an
+      // expiry worth interrupting anyone about.
+      announceSessionExpired(lastRefreshFailure);
     }
   }
 

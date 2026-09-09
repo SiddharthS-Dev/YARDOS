@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { AlertCircle, Inbox, Loader2, RefreshCw, type LucideIcon } from 'lucide-react';
+import { AlertCircle, Inbox, Loader2, RefreshCw, ShieldOff, type LucideIcon } from 'lucide-react';
 
 import { cn } from '@/lib/cn';
 import {
@@ -533,6 +533,49 @@ export function LoadingState({ label = 'Loading' }: { label?: string }) {
     <div className="flex items-center justify-center gap-2 px-6 py-10 text-xs text-ink-3" aria-live="polite">
       <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
       {label}
+    </div>
+  );
+}
+
+/**
+ * Authenticated, but not permitted.
+ *
+ * Distinct from an error: nothing failed, the user simply may not be here. It
+ * offers a way out rather than leaving them on a dead screen, and deliberately
+ * does not name the permission that was missing - which rules apply is not
+ * something an unauthorised caller needs told.
+ */
+export function UnauthorizedState({
+  area,
+  onGoBack,
+  className,
+}: {
+  /** What they tried to reach, in plain words. Optional. */
+  area?: string;
+  onGoBack?: () => void;
+  className?: string;
+}) {
+  return (
+    <div className={cn('flex flex-col items-center px-6 py-12 text-center', className)} role="alert">
+      <ShieldOff className="h-7 w-7 text-steel" aria-hidden />
+      <p className="mt-3 text-sm font-medium text-ink">Access restricted</p>
+      <p className="mt-1 max-w-sm text-xs text-ink-3">
+        You don&apos;t have permission to access {area ?? 'this area'}. If you believe you should,
+        contact your administrator.
+      </p>
+      <div className="mt-4 flex items-center gap-2">
+        <a
+          href="/dashboard"
+          className="inline-flex items-center justify-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-primary-strong"
+        >
+          Go to overview
+        </a>
+        {onGoBack ? (
+          <Button onClick={onGoBack} size="md">
+            Go back
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 }
