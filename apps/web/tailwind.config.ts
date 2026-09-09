@@ -3,23 +3,26 @@ import type { Config } from 'tailwindcss';
 /**
  * YARDOS operational design language.
  *
- * The palette is built for a control room, not a marketing site. Three
- * decisions shape it:
+ * Colours resolve to CSS custom properties defined in `app/globals.css`, not to
+ * literal hex values. That indirection is what lets the console carry two
+ * themes that are both designed rather than one theme and its inversion, and it
+ * means a component never has to know which theme is active.
  *
- *   **Dark by default.** Gate consoles run for a whole shift, often on screens
- *   in bright yards behind glass. A near-black ground with restrained contrast
- *   is easier to read for eight hours than a white one.
+ * The `<alpha-value>` placeholder lets Tailwind's opacity modifiers keep
+ * working: `bg-primary/10` resolves correctly against the variable.
  *
- *   **Colour carries meaning, not decoration.** Green means available or
- *   settled, amber means occupied or awaiting attention, red means blocked or
- *   failed, blue means informational. An operator should be able to read state
- *   from colour alone at a glance, so colour is never used for emphasis.
+ * Two rules govern use:
  *
- *   **Restraint.** One cyan accent for interaction. No neon, no glow beyond a
- *   subtle ring on live elements. Anything that competes with the status
- *   colours actively harms the screen's job.
+ *   **Colour carries meaning, never decoration.** `primary` is a successful or
+ *   active state and the primary action; `amber` is attention; `blue` is
+ *   informational; `slate` is blocked or unknown; `danger` is critical. Nothing
+ *   is coloured for emphasis alone.
+ *
+ *   **Colour is never the only signal.** Every status renders colour, an icon
+ *   and a word, so it survives greyscale, low contrast and colour blindness.
  */
 const config: Config = {
+  darkMode: ['class', '[data-theme="dark"]'],
   content: [
     './app/**/*.{ts,tsx}',
     './components/**/*.{ts,tsx}',
@@ -29,59 +32,83 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Ground: near-black navy, stepped so panels separate without borders
-        // doing all the work.
-        base: {
-          950: '#070b14',
-          900: '#0b1220',
-          850: '#0f1729',
-          800: '#131d33',
-          750: '#18243d',
-          700: '#1e2c48',
-          600: '#293a5c',
-          500: '#3b4f76',
+        ground: 'rgb(var(--ground) / <alpha-value>)',
+        surface: {
+          DEFAULT: 'rgb(var(--surface) / <alpha-value>)',
+          2: 'rgb(var(--surface-2) / <alpha-value>)',
+          3: 'rgb(var(--surface-3) / <alpha-value>)',
         },
-        // Interaction accent.
-        accent: {
-          400: '#38bdf8',
-          500: '#0ea5e9',
-          600: '#0284c7',
+        line: {
+          DEFAULT: 'rgb(var(--line) / <alpha-value>)',
+          strong: 'rgb(var(--line-strong) / <alpha-value>)',
         },
-        // Semantic status. These are the only colours that carry meaning.
-        ok: { 400: '#34d399', 500: '#10b981', 600: '#059669' },
-        warn: { 400: '#fbbf24', 500: '#f59e0b', 600: '#d97706' },
-        danger: { 400: '#f87171', 500: '#ef4444', 600: '#dc2626' },
-        info: { 400: '#60a5fa', 500: '#3b82f6', 600: '#2563eb' },
-        muted: { 400: '#94a3b8', 500: '#64748b', 600: '#475569' },
+        ink: {
+          DEFAULT: 'rgb(var(--ink) / <alpha-value>)',
+          2: 'rgb(var(--ink-2) / <alpha-value>)',
+          3: 'rgb(var(--ink-3) / <alpha-value>)',
+          inverse: 'rgb(var(--ink-inverse) / <alpha-value>)',
+        },
+
+        primary: {
+          DEFAULT: 'rgb(var(--primary) / <alpha-value>)',
+          strong: 'rgb(var(--primary-strong) / <alpha-value>)',
+          soft: 'rgb(var(--primary-soft) / <alpha-value>)',
+        },
+        amber: {
+          DEFAULT: 'rgb(var(--amber) / <alpha-value>)',
+          strong: 'rgb(var(--amber-strong) / <alpha-value>)',
+          soft: 'rgb(var(--amber-soft) / <alpha-value>)',
+        },
+        blue: {
+          DEFAULT: 'rgb(var(--blue) / <alpha-value>)',
+          strong: 'rgb(var(--blue-strong) / <alpha-value>)',
+          soft: 'rgb(var(--blue-soft) / <alpha-value>)',
+        },
+        slate: {
+          DEFAULT: 'rgb(var(--slate) / <alpha-value>)',
+          strong: 'rgb(var(--slate-strong) / <alpha-value>)',
+          soft: 'rgb(var(--slate-soft) / <alpha-value>)',
+        },
+        danger: {
+          DEFAULT: 'rgb(var(--danger) / <alpha-value>)',
+          strong: 'rgb(var(--danger-strong) / <alpha-value>)',
+          soft: 'rgb(var(--danger-soft) / <alpha-value>)',
+        },
       },
       fontFamily: {
         sans: ['ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
-        // Registration numbers, money and identifiers are read character by
-        // character, so they get a monospace face.
+        // Read character by character: plates, money, ids, timestamps, bays.
         mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
       },
       fontSize: {
         '2xs': ['0.6875rem', { lineHeight: '1rem', letterSpacing: '0.02em' }],
       },
-      borderRadius: {
-        panel: '0.625rem',
-      },
       boxShadow: {
-        panel: '0 1px 2px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.04)',
-        raised: '0 4px 16px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06)',
+        panel: 'var(--shadow-panel)',
+        raised: 'var(--shadow-raised)',
       },
       animation: {
         'pulse-soft': 'pulse-soft 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'slide-in': 'slide-in 180ms ease-out',
+        'slide-up': 'slide-up 160ms ease-out',
+        'fade-in': 'fade-in 120ms ease-out',
+        shimmer: 'shimmer 1.6s linear infinite',
       },
       keyframes: {
         'pulse-soft': {
           '0%, 100%': { opacity: '1' },
           '50%': { opacity: '0.45' },
         },
-        'slide-in': {
-          from: { opacity: '0', transform: 'translateY(-4px)' },
+        'slide-up': {
+          from: { opacity: '0', transform: 'translateY(6px)' },
           to: { opacity: '1', transform: 'translateY(0)' },
+        },
+        'fade-in': {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
+        shimmer: {
+          from: { backgroundPosition: '-200% 0' },
+          to: { backgroundPosition: '200% 0' },
         },
       },
     },

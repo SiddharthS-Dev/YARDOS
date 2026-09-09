@@ -1,82 +1,593 @@
 'use client';
 
-import { AlertTriangle, Inbox, Loader2, type LucideIcon } from 'lucide-react';
+import * as React from 'react';
+import { AlertCircle, Inbox, Loader2, RefreshCw, type LucideIcon } from 'lucide-react';
+
 import { cn } from '@/lib/cn';
+import {
+  AGE_SEVERITY_VISUAL,
+  STATUS_VISUALS,
+  type StatusKind,
+  ageSeverity,
+  humanise,
+  statusVisual,
+} from '@/lib/status';
+import { formatAgeing, formatMoney, formatPlate } from '@/lib/format';
 
-/**
- * The console's shared primitives.
- *
- * Deliberately small and unopinionated — they exist so that a panel, a status
- * chip or an empty state looks identical everywhere, not to abstract away
- * layout. Screens compose these; they do not subclass them.
- */
-
-/* ------------------------------------------------------------------ */
-/* Panel                                                               */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
+/* Surfaces                                                            */
+/* ================================================================== */
 
 export function Panel({
   children,
   className,
   padded = true,
+  as: Tag = 'section',
 }: {
   children: React.ReactNode;
   className?: string;
   padded?: boolean;
+  as?: 'section' | 'div' | 'article' | 'aside';
 }) {
   return (
-    <section
-      className={cn(
-        'rounded-panel border border-white/5 bg-base-850 shadow-panel',
-        padded && 'p-4',
-        className,
-      )}
-    >
-      {children}
-    </section>
+    <Tag className={cn('panel', padded && 'p-4', className)}>{children}</Tag>
   );
 }
 
 export function PanelHeader({
   title,
   subtitle,
-  action,
   icon: Icon,
+  action,
+  className,
 }: {
-  title: string;
-  subtitle?: string;
-  action?: React.ReactNode;
+  title: React.ReactNode;
+  subtitle?: React.ReactNode;
   icon?: LucideIcon;
+  action?: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="mb-3 flex items-start justify-between gap-3">
-      <div className="min-w-0">
-        <h2 className="flex items-center gap-2 text-sm font-semibold tracking-wide text-slate-200">
-          {Icon ? <Icon className="h-4 w-4 text-muted-400" aria-hidden /> : null}
-          {title}
-        </h2>
-        {subtitle ? <p className="mt-0.5 text-xs text-muted-400">{subtitle}</p> : null}
+    <div className={cn('mb-3 flex items-start justify-between gap-3', className)}>
+      <div className="flex min-w-0 items-start gap-2">
+        {Icon ? <Icon className="mt-0.5 h-4 w-4 shrink-0 text-ink-3" aria-hidden /> : null}
+        <div className="min-w-0">
+          <h2 className="truncate text-sm font-semibold text-ink">{title}</h2>
+          {subtitle ? <p className="mt-0.5 text-xs text-ink-3">{subtitle}</p> : null}
+        </div>
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}
     </div>
   );
 }
 
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 /* Status                                                              */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
 
+/**
+ * A status badge.
+ *
+ * Renders colour, icon AND word, always. That triple is why the badge survives
+ * greyscale printing, colour blindness and a sun-washed gate screen.
+ */
+export function StatusBadge({
+  status,
+  label,
+  size = 'md',
+  className,
+}: {
+  status: string | null | undefined;
+  /** Overrides the humanised status text. */
+  label?: string;
+  size?: 'sm' | 'md';
+  className?: string;
+}) {
+  const visual = statusVisual(status);
+  const Icon = visual.icon;
+
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 rounded font-medium whitespace-nowrap',
+        size === 'sm' ? 'px-1.5 py-0.5 text-2xs' : 'px-2 py-0.5 text-xs',
+        visual.badge,
+        className,
+      )}
+    >
+      <Icon className={size === 'sm' ? 'h-3 w-3' : 'h-3.5 w-3.5'} aria-hidden />
+      {label ?? humanise(status)}
+    </span>
+  );
+}
+
+/** A neutral, non-status chip. Used for counts and categories. */
+export function Chip({
+  children,
+  kind,
+  className,
+}: {
+  children: React.ReactNode;
+  kind?: StatusKind;
+  className?: string;
+}) {
+  const visual = kind ? STATUS_VISUALS[kind] : null;
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-2xs font-medium',
+        visual ? visual.badge : 'bg-surface-3 text-ink-2 ring-1 ring-inset ring-line',
+        className,
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** A live indicator. Pulses only while genuinely live. */
+export function LiveDot({
+  live = true,
+  label,
+  tone,
+}: {
+  live?: boolean;
+  label?: string;
+  /** @deprecated Legacy tone prop; anything other than `ok` reads as not live. */
+  tone?: string;
+}) {
+  const isLive = tone === undefined ? live : tone === 'ok' || tone === 'accent';
+  return (
+    <span className="inline-flex items-center gap-1.5 text-2xs font-medium text-ink-3">
+      <span className="relative flex h-2 w-2" aria-hidden>
+        {isLive ? (
+          <span className="absolute inline-flex h-full w-full animate-pulse-soft rounded-full bg-primary/60" />
+        ) : null}
+        <span
+          className={cn(
+            'relative inline-flex h-2 w-2 rounded-full',
+            isLive ? 'bg-primary' : 'bg-slate',
+          )}
+        />
+      </span>
+      {label ? <span>{label}</span> : null}
+      <span className="sr-only">{isLive ? 'Live' : 'Not live'}</span>
+    </span>
+  );
+}
+
+/* ================================================================== */
+/* Domain display components                                           */
+/* ================================================================== */
+
+/**
+ * A registration number, rendered as the identifier it is.
+ *
+ * Used everywhere a plate appears so the platform speaks about a vehicle in one
+ * voice. Before this existed the same grouping logic was repeated in seven
+ * files and drifted.
+ */
+export function VehicleIdentifier({
+  plate,
+  make,
+  model,
+  vehicleClass,
+  status,
+  size = 'md',
+  className,
+}: {
+  plate: string | null | undefined;
+  make?: string | null;
+  model?: string | null;
+  vehicleClass?: string | null;
+  status?: string | null;
+  size?: 'sm' | 'md' | 'lg';
+  className?: string;
+}) {
+  const descriptor = [vehicleClass ? humanise(vehicleClass) : null, make, model]
+    .filter(Boolean)
+    .join(' · ');
+
+  return (
+    <span className={cn('inline-flex min-w-0 flex-col gap-0.5', className)}>
+      <span className="flex items-center gap-2">
+        <span
+          className={cn(
+            'identifier font-semibold text-ink',
+            size === 'lg' && 'text-2xl',
+            size === 'md' && 'text-sm',
+            size === 'sm' && 'text-xs',
+          )}
+        >
+          {formatPlate(plate)}
+        </span>
+        {status ? <StatusBadge status={status} size="sm" /> : null}
+      </span>
+      {descriptor ? (
+        <span className={cn('truncate text-ink-3', size === 'lg' ? 'text-sm' : 'text-2xs')}>
+          {descriptor}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/**
+ * A monetary amount.
+ *
+ * The console never computes one - this renders a decimal string the API
+ * produced. `intent` colours the figure by what it means operationally, not by
+ * its sign: an outstanding balance is amber even though it is a positive number.
+ */
+export function Money({
+  amount,
+  currency = 'INR',
+  intent = 'neutral',
+  size = 'md',
+  className,
+}: {
+  amount: string | number | null | undefined;
+  currency?: string;
+  intent?: 'neutral' | 'outstanding' | 'paid' | 'pending' | 'negative';
+  size?: 'sm' | 'md' | 'lg';
+  className?: string;
+}) {
+  const intentClass = {
+    neutral: 'text-ink',
+    outstanding: 'text-amber-strong',
+    paid: 'text-primary-strong',
+    pending: 'text-blue-strong',
+    negative: 'text-danger-strong',
+  }[intent];
+
+  return (
+    <span
+      className={cn(
+        'tabular font-mono',
+        size === 'lg' && 'text-xl font-semibold',
+        size === 'md' && 'text-sm',
+        size === 'sm' && 'text-xs',
+        intentClass,
+        className,
+      )}
+    >
+      {formatMoney(amount, currency)}
+    </span>
+  );
+}
+
+/**
+ * A vehicle's age on site, with severity.
+ *
+ * Severity is shown by an icon and a word as well as colour, because "this one
+ * has been here too long" is exactly the signal an operator must not miss.
+ */
+export function Age({
+  days,
+  showSeverity = true,
+  className,
+}: {
+  days: number | null | undefined;
+  showSeverity?: boolean;
+  className?: string;
+}) {
+  const severity = ageSeverity(days);
+  const { kind, label } = AGE_SEVERITY_VISUAL[severity];
+  const visual = STATUS_VISUALS[kind];
+  const Icon = visual.icon;
+
+  return (
+    <span className={cn('inline-flex items-center gap-1.5', className)}>
+      <span className={cn('tabular font-mono text-xs', severity === 'NORMAL' ? 'text-ink-2' : visual.text)}>
+        {formatAgeing(days)}
+      </span>
+      {showSeverity && severity !== 'NORMAL' ? (
+        <span className={cn('inline-flex items-center gap-0.5 text-2xs font-medium', visual.text)}>
+          <Icon className="h-3 w-3" aria-hidden />
+          {label}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/* ================================================================== */
+/* Actions                                                             */
+/* ================================================================== */
+
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+
+export const Button = React.forwardRef<
+  HTMLButtonElement,
+  React.ButtonHTMLAttributes<HTMLButtonElement> & {
+    variant?: ButtonVariant;
+    size?: 'sm' | 'md' | 'lg';
+    loading?: boolean;
+    icon?: LucideIcon;
+    /** Shown as a tooltip and to screen readers when the button is disabled. */
+    disabledReason?: string;
+  }
+>(function Button(
+  { variant = 'secondary', size = 'md', loading, icon: Icon, disabledReason, className, children, disabled, ...props },
+  ref,
+) {
+  const isDisabled = disabled || loading;
+
+  return (
+    <button
+      ref={ref}
+      type="button"
+      disabled={isDisabled}
+      title={isDisabled && disabledReason ? disabledReason : undefined}
+      aria-describedby={undefined}
+      className={cn(
+        'inline-flex items-center justify-center gap-1.5 rounded-md font-medium transition-colors',
+        'disabled:cursor-not-allowed disabled:opacity-50',
+        size === 'sm' && 'px-2.5 py-1 text-xs',
+        size === 'md' && 'px-3 py-1.5 text-sm',
+        size === 'lg' && 'px-5 py-2.5 text-base',
+        variant === 'primary' && 'bg-primary text-white hover:bg-primary-strong',
+        variant === 'secondary' &&
+          'bg-surface text-ink ring-1 ring-inset ring-line-strong hover:bg-surface-2',
+        variant === 'ghost' && 'text-ink-2 hover:bg-surface-2 hover:text-ink',
+        variant === 'danger' && 'bg-danger text-white hover:bg-danger-strong',
+        className,
+      )}
+      {...props}
+    >
+      {loading ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+      ) : Icon ? (
+        <Icon className={size === 'lg' ? 'h-5 w-5' : 'h-3.5 w-3.5'} aria-hidden />
+      ) : null}
+      {children}
+      {isDisabled && disabledReason ? <span className="sr-only">{disabledReason}</span> : null}
+    </button>
+  );
+});
+
+/* ================================================================== */
+/* Data display                                                        */
+/* ================================================================== */
+
+export function Field({
+  label,
+  children,
+  mono,
+  tone,
+  className,
+}: {
+  label: string;
+  children: React.ReactNode;
+  mono?: boolean;
+  /** @deprecated Legacy tone prop, kept while screens migrate. */
+  tone?: string;
+  className?: string;
+}) {
+  const toneClass =
+    tone === 'ok'
+      ? 'text-primary-strong'
+      : tone === 'warn'
+        ? 'text-amber-strong'
+        : tone === 'danger'
+          ? 'text-danger-strong'
+          : tone === 'info'
+            ? 'text-blue-strong'
+            : 'text-ink';
+
+  return (
+    <div className={cn('min-w-0', className)}>
+      <dt className="text-2xs font-semibold uppercase tracking-wider text-ink-3">{label}</dt>
+      <dd className={cn('mt-0.5 truncate text-sm', toneClass, mono && 'tabular font-mono')}>
+        {children}
+      </dd>
+    </div>
+  );
+}
+
+/**
+ * A capacity bar.
+ *
+ * Segmented by meaning rather than a single percentage fill, because "80% full"
+ * and "80% full with 12 bays blocked" are different operational situations.
+ */
+export function CapacityBar({
+  occupied,
+  available,
+  blocked = 0,
+  className,
+}: {
+  occupied: number;
+  available: number;
+  blocked?: number;
+  className?: string;
+}) {
+  const total = Math.max(1, occupied + available + blocked);
+  const pct = (n: number) => `${(n / total) * 100}%`;
+
+  return (
+    <div
+      className={cn('flex h-2 w-full overflow-hidden rounded-full bg-surface-3', className)}
+      role="img"
+      aria-label={`${occupied} occupied, ${available} available${blocked ? `, ${blocked} blocked` : ''}`}
+    >
+      <div className="bg-primary" style={{ width: pct(occupied) }} />
+      {blocked > 0 ? <div className="bg-slate" style={{ width: pct(blocked) }} /> : null}
+      <div className="bg-transparent" style={{ width: pct(available) }} />
+    </div>
+  );
+}
+
+/* ================================================================== */
+/* States: loading, empty, error                                       */
+/* ================================================================== */
+
+/** A shimmer block shaped like the content it stands in for. */
+export function Skeleton({ className }: { className?: string }) {
+  return (
+    <div
+      className={cn(
+        'animate-shimmer rounded bg-surface-3',
+        'bg-[linear-gradient(90deg,transparent,rgb(var(--line)/0.6),transparent)] bg-[length:200%_100%]',
+        className,
+      )}
+      aria-hidden
+    />
+  );
+}
+
+export function SkeletonRows({ rows = 5, className }: { rows?: number; className?: string }) {
+  return (
+    <div className={cn('space-y-2 p-4', className)} aria-busy="true" aria-live="polite">
+      <span className="sr-only">Loading</span>
+      {Array.from({ length: rows }, (_, index) => (
+        <Skeleton key={index} className="h-8 w-full" />
+      ))}
+    </div>
+  );
+}
+
+export function SkeletonTiles({ count = 4, className }: { count?: number; className?: string }) {
+  return (
+    <div className={cn('grid gap-3 sm:grid-cols-2 xl:grid-cols-4', className)} aria-busy="true">
+      <span className="sr-only">Loading</span>
+      {Array.from({ length: count }, (_, index) => (
+        <Skeleton key={index} className="h-20 w-full" />
+      ))}
+    </div>
+  );
+}
+
+export function EmptyState({
+  icon: Icon = Inbox,
+  title,
+  description,
+  action,
+  className,
+}: {
+  icon?: LucideIcon;
+  title: string;
+  description?: string;
+  action?: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn('flex flex-col items-center px-6 py-12 text-center', className)}>
+      <Icon className="h-7 w-7 text-ink-3" aria-hidden />
+      <p className="mt-3 text-sm font-medium text-ink">{title}</p>
+      {description ? <p className="mt-1 max-w-sm text-xs text-ink-3">{description}</p> : null}
+      {action ? <div className="mt-4">{action}</div> : null}
+    </div>
+  );
+}
+
+/**
+ * An error a user can act on.
+ *
+ * Says what happened, why it may have happened, and what to do next. The
+ * correlation id is shown because it is the one thing that makes a support
+ * conversation short. Stack traces are never surfaced.
+ */
+export function ErrorState({
+  title = 'This could not be loaded',
+  message,
+  reason,
+  correlationId,
+  onRetry,
+  action,
+  className,
+}: {
+  title?: string;
+  message?: string;
+  reason?: string;
+  correlationId?: string;
+  onRetry?: () => void;
+  action?: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn('flex flex-col items-center px-6 py-10 text-center', className)} role="alert">
+      <AlertCircle className="h-7 w-7 text-danger" aria-hidden />
+      <p className="mt-3 text-sm font-medium text-ink">{title}</p>
+      {message ? <p className="mt-1 max-w-md text-xs text-ink-2">{message}</p> : null}
+      {reason ? <p className="mt-1 max-w-md text-xs text-ink-3">{reason}</p> : null}
+      <div className="mt-4 flex items-center gap-2">
+        {onRetry ? (
+          <Button icon={RefreshCw} onClick={onRetry} size="sm">
+            Try again
+          </Button>
+        ) : null}
+        {action}
+      </div>
+      {correlationId ? (
+        <p className="mt-3 text-2xs text-ink-3">
+          Reference <span className="identifier">{correlationId}</span>
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+export function LoadingState({ label = 'Loading' }: { label?: string }) {
+  return (
+    <div className="flex items-center justify-center gap-2 px-6 py-10 text-xs text-ink-3" aria-live="polite">
+      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+      {label}
+    </div>
+  );
+}
+
+/**
+ * A capability the backend does not yet expose.
+ *
+ * Shown instead of a screen that would have nothing real to display. Being
+ * explicit is the honest alternative to a plausible-looking page of invented
+ * data, and to a navigation entry that leads nowhere.
+ */
+export function NotAvailableState({
+  feature,
+  dependency,
+  className,
+}: {
+  feature: string;
+  dependency: string;
+  className?: string;
+}) {
+  return (
+    <div className={cn('flex flex-col items-center px-6 py-12 text-center', className)}>
+      <AlertCircle className="h-7 w-7 text-ink-3" aria-hidden />
+      <p className="mt-3 text-sm font-medium text-ink">{feature} is not available yet</p>
+      <p className="mt-1 max-w-md text-xs text-ink-3">{dependency}</p>
+    </div>
+  );
+}
+
+/* ================================================================== */
+/* Compatibility layer                                                 */
+/* ================================================================== */
+/*
+ * These keep the screens that have not yet been reworked compiling while the
+ * console is migrated to the new design system one screen at a time. They are
+ * deliberately thin wrappers over the new components rather than a second
+ * implementation, so there is no possibility of the two drifting.
+ *
+ * Every one of them is deleted once the last screen using it is reworked; see
+ * docs/UI-IMPLEMENTATION-STATUS.md for what still depends on them.
+ */
+
+/** @deprecated Use `StatusBadge` or `Chip`. */
 export type Tone = 'ok' | 'warn' | 'danger' | 'info' | 'neutral' | 'accent';
 
-const TONE_CLASSES: Record<Tone, string> = {
-  ok: 'bg-ok-500/12 text-ok-400 ring-ok-500/25',
-  warn: 'bg-warn-500/12 text-warn-400 ring-warn-500/25',
-  danger: 'bg-danger-500/12 text-danger-400 ring-danger-500/25',
-  info: 'bg-info-500/12 text-info-400 ring-info-500/25',
-  accent: 'bg-accent-500/12 text-accent-400 ring-accent-500/25',
-  neutral: 'bg-white/5 text-muted-400 ring-white/10',
+const TONE_TO_KIND: Record<Tone, StatusKind> = {
+  ok: 'SUCCESS',
+  warn: 'WARNING',
+  danger: 'CRITICAL',
+  info: 'PENDING',
+  neutral: 'UNKNOWN',
+  accent: 'ACTIVE',
 };
 
+/** @deprecated Use `Chip` with a `kind`, or `StatusBadge` for a real status. */
 export function Badge({
   children,
   tone = 'neutral',
@@ -87,297 +598,72 @@ export function Badge({
   className?: string;
 }) {
   return (
-    <span
-      className={cn(
-        'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wider ring-1 ring-inset',
-        TONE_CLASSES[tone],
-        className,
-      )}
-    >
+    <Chip kind={TONE_TO_KIND[tone]} className={className}>
       {children}
-    </span>
+    </Chip>
   );
 }
 
-/**
- * Maps a domain status to a colour.
- *
- * Kept in one place so the same status never renders green on one screen and
- * amber on another — an operator reads state from colour, so inconsistency
- * here is a correctness problem, not a cosmetic one.
- */
+/** @deprecated Use `statusVisual` from `@/lib/status`. */
 export function toneForStatus(status: string | null | undefined): Tone {
-  if (!status) return 'neutral';
-  switch (status.toUpperCase()) {
-    // Good / settled / available
-    case 'ACTIVE': case 'OPEN': case 'PAID': case 'SETTLED': case 'RECEIVED':
-    case 'APPROVED': case 'COMPLETED': case 'SUCCESS': case 'AVAILABLE':
-    case 'ONLINE': case 'VERIFIED': case 'CLEAN': case 'WON': case 'PROCESSED':
-      return 'ok';
-    // Attention / in progress / occupied
-    case 'PENDING': case 'PENDING_REVIEW': case 'PENDING_EXIT': case 'ON_HOLD':
-    case 'UNDER_HOLD': case 'AWAITING_APPROVAL': case 'AWAITING_PAYMENT':
-    case 'PARTIALLY_PAID': case 'PARTIALLY_RECEIVED': case 'SUBMITTED':
-    case 'OCCUPIED': case 'DEGRADED': case 'VAHAN_PENDING': case 'SETTLEMENT_PENDING':
-    case 'BIDDING_OPEN': case 'RELEASE_REQUESTED': case 'GENERATED': case 'ISSUED':
-      return 'warn';
-    // Failed / blocked / refused
-    case 'FAILED': case 'REJECTED': case 'CANCELLED': case 'VOID': case 'BLOCKED':
-    case 'OFFLINE': case 'SUSPENDED': case 'DISABLED': case 'LOCKED': case 'INFECTED':
-    case 'VAHAN_FAILED': case 'DEFAULTED': case 'BLACKLISTED': case 'ELIGIBILITY_FAILED':
-    case 'EXHAUSTED': case 'DEAD_LETTER':
-      return 'danger';
-    // Informational
-    case 'PARKED': case 'SENT': case 'LISTED': case 'PUBLISHED': case 'SCHEDULED':
-    case 'RESERVED': case 'WINNER_SELECTED': case 'BIDDING_CLOSED': case 'CLOSED':
-    case 'RELEASE_APPROVED': case 'AUCTION_LISTED': case 'AUCTION_ELIGIBLE':
-      return 'info';
-    // Terminal / inert
-    case 'EXITED': case 'SOLD': case 'DRAFT': case 'UNAVAILABLE': case 'NOT_REQUESTED':
-    case 'UNMATCHED': case 'LOST': case 'OUTBID': case 'UNKNOWN': case 'PLANNED':
-      return 'neutral';
-    default:
-      return 'neutral';
-  }
+  const kind = statusVisual(status).kind;
+  if (kind === 'SUCCESS' || kind === 'ACTIVE') return 'ok';
+  if (kind === 'WARNING') return 'warn';
+  if (kind === 'CRITICAL') return 'danger';
+  if (kind === 'PENDING') return 'info';
+  return 'neutral';
 }
 
-export function StatusBadge({ status, className }: { status: string | null | undefined; className?: string }) {
-  if (!status) return <span className="text-muted-500">—</span>;
-  return (
-    <Badge tone={toneForStatus(status)} className={className}>
-      {status.replace(/_/g, ' ')}
-    </Badge>
-  );
-}
-
-/** A small pulsing dot for genuinely live indicators. Used sparingly. */
-export function LiveDot({ tone = 'ok', label }: { tone?: Tone; label?: string }) {
-  const colour =
-    tone === 'ok' ? 'bg-ok-400' : tone === 'warn' ? 'bg-warn-400' : tone === 'danger' ? 'bg-danger-400' : 'bg-muted-400';
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className={cn('h-1.5 w-1.5 rounded-full', colour, tone !== 'danger' && 'animate-pulse-soft')} />
-      {label ? <span className="text-2xs uppercase tracking-wider text-muted-400">{label}</span> : null}
-    </span>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Buttons                                                             */
-/* ------------------------------------------------------------------ */
-
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
-
-const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
-  primary: 'bg-accent-500 text-white hover:bg-accent-400 disabled:bg-accent-600/40',
-  secondary: 'bg-white/5 text-slate-200 hover:bg-white/10 ring-1 ring-inset ring-white/10',
-  ghost: 'text-muted-400 hover:bg-white/5 hover:text-slate-200',
-  danger: 'bg-danger-600 text-white hover:bg-danger-500 disabled:bg-danger-600/40',
-};
-
-export function Button({
-  children,
-  variant = 'secondary',
-  size = 'md',
-  loading = false,
-  icon: Icon,
-  className,
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: ButtonVariant;
-  size?: 'sm' | 'md' | 'lg';
-  loading?: boolean;
-  icon?: LucideIcon;
-}) {
-  return (
-    <button
-      {...props}
-      disabled={props.disabled || loading}
-      className={cn(
-        'inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-400 focus-visible:ring-offset-2 focus-visible:ring-offset-base-900',
-        'disabled:cursor-not-allowed disabled:opacity-60',
-        size === 'sm' && 'px-2.5 py-1.5 text-xs',
-        size === 'md' && 'px-3.5 py-2 text-sm',
-        size === 'lg' && 'px-5 py-3 text-base',
-        BUTTON_VARIANTS[variant],
-        className,
-      )}
-    >
-      {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : Icon ? <Icon className="h-4 w-4" aria-hidden /> : null}
-      {children}
-    </button>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* State displays                                                      */
-/* ------------------------------------------------------------------ */
-
-/**
- * Empty state.
- *
- * Requirement S51: say specifically what is absent and what to do next.
- * "No vehicles at the gate yet" beats "No data".
- */
-export function EmptyState({
-  title,
-  description,
-  action,
-  icon: Icon = Inbox,
-}: {
-  title: string;
-  description?: string;
-  action?: React.ReactNode;
-  icon?: LucideIcon;
-}) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
-      <Icon className="h-7 w-7 text-muted-600" aria-hidden />
-      <p className="text-sm font-medium text-slate-300">{title}</p>
-      {description ? <p className="max-w-sm text-xs leading-relaxed text-muted-400">{description}</p> : null}
-      {action ? <div className="mt-2">{action}</div> : null}
-    </div>
-  );
-}
-
-/**
- * Error state.
- *
- * Shows the server's message, which is written for an operator, plus the
- * correlation id so a support call can be traced. Never a stack trace.
- */
-export function ErrorState({
-  title = 'Something went wrong',
-  message,
-  correlationId,
-  onRetry,
-}: {
-  title?: string;
-  message?: string;
-  correlationId?: string;
-  onRetry?: () => void;
-}) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
-      <AlertTriangle className="h-7 w-7 text-danger-400" aria-hidden />
-      <p className="text-sm font-medium text-slate-200">{title}</p>
-      {message ? <p className="max-w-md text-xs leading-relaxed text-muted-400">{message}</p> : null}
-      {correlationId ? (
-        <p className="font-mono text-2xs text-muted-600">Reference: {correlationId}</p>
-      ) : null}
-      {onRetry ? (
-        <Button size="sm" variant="secondary" onClick={onRetry} className="mt-2">
-          Try again
-        </Button>
-      ) : null}
-    </div>
-  );
-}
-
-export function LoadingState({ label = 'Loading' }: { label?: string }) {
-  return (
-    <div className="flex items-center justify-center gap-2 px-4 py-10 text-muted-400">
-      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-      <span className="text-xs">{label}…</span>
-    </div>
-  );
-}
-
-/** Skeleton rows, so a table does not jump when data arrives. */
-export function SkeletonRows({ rows = 5, className }: { rows?: number; className?: string }) {
-  return (
-    <div className={cn('space-y-2 p-4', className)}>
-      {Array.from({ length: rows }).map((_, index) => (
-        <div key={index} className="h-8 animate-pulse rounded bg-white/5" />
-      ))}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Data display                                                        */
-/* ------------------------------------------------------------------ */
-
-/** A labelled value. The console's most-used building block. */
-export function Field({
-  label,
-  children,
-  mono = false,
-  tone,
-  className,
-}: {
-  label: string;
-  children: React.ReactNode;
-  mono?: boolean;
-  tone?: 'muted' | 'strong';
-  className?: string;
-}) {
-  return (
-    <div className={cn('min-w-0', className)}>
-      <dt className="text-2xs uppercase tracking-wider text-muted-500">{label}</dt>
-      <dd
-        className={cn(
-          'mt-0.5 truncate text-sm',
-          mono && 'font-mono',
-          tone === 'muted' ? 'text-muted-400' : 'text-slate-200',
-          tone === 'strong' && 'font-semibold text-white',
-        )}
-      >
-        {children}
-      </dd>
-    </div>
-  );
-}
-
+/** @deprecated Use `KpiTile` from `@/components/ui/kpi`. */
 export function MetricCard({
   label,
   value,
+  icon: Icon,
   hint,
   tone = 'neutral',
-  icon: Icon,
   href,
+  className,
 }: {
   label: string;
-  value: string | number;
-  hint?: string;
-  tone?: Tone;
+  value: React.ReactNode;
   icon?: LucideIcon;
+  hint?: React.ReactNode;
+  tone?: Tone;
   href?: string;
+  className?: string;
 }) {
-  const accentBar =
-    tone === 'ok' ? 'bg-ok-500' : tone === 'warn' ? 'bg-warn-500' : tone === 'danger' ? 'bg-danger-500'
-      : tone === 'info' ? 'bg-info-500' : tone === 'accent' ? 'bg-accent-500' : 'bg-white/10';
-
-  const content = (
-    <div className="relative overflow-hidden rounded-panel border border-white/5 bg-base-850 p-4 shadow-panel transition-colors hover:bg-base-800">
-      <span className={cn('absolute inset-y-0 left-0 w-0.5', accentBar)} aria-hidden />
+  const visual = STATUS_VISUALS[TONE_TO_KIND[tone]];
+  const Wrapper: React.ElementType = href ? 'a' : 'div';
+  return (
+    <Wrapper
+      {...(href ? { href } : {})}
+      className={cn('panel block p-3.5', href && 'transition-colors hover:bg-surface-2', className)}
+    >
       <div className="flex items-start justify-between gap-2">
-        <p className="text-2xs uppercase tracking-wider text-muted-500">{label}</p>
-        {Icon ? <Icon className="h-4 w-4 shrink-0 text-muted-600" aria-hidden /> : null}
+        <p className="text-2xs font-semibold uppercase tracking-wider text-ink-3">{label}</p>
+        {Icon ? <Icon className={cn('h-4 w-4', tone === 'neutral' ? 'text-ink-3' : visual.text)} aria-hidden /> : null}
       </div>
-      <p className="mt-1.5 font-mono text-2xl font-semibold tabular-nums text-white">{value}</p>
-      {hint ? <p className="mt-1 text-xs text-muted-400">{hint}</p> : null}
-    </div>
-  );
-
-  return href ? (
-    <a href={href} className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-400 rounded-panel">
-      {content}
-    </a>
-  ) : (
-    content
+      <p className={cn('mt-1.5 tabular text-2xl font-semibold', tone === 'neutral' ? 'text-ink' : visual.text)}>
+        {value}
+      </p>
+      {hint ? <p className="mt-0.5 text-2xs text-ink-3">{hint}</p> : null}
+    </Wrapper>
   );
 }
 
-/** A horizontal utilisation bar. Colour tracks pressure, not brand. */
+/** @deprecated Use `CapacityBar`, which segments by meaning. */
 export function UtilisationBar({ percent, className }: { percent: number; className?: string }) {
   const clamped = Math.max(0, Math.min(100, percent));
-  const tone =
-    clamped >= 90 ? 'bg-danger-500' : clamped >= 70 ? 'bg-warn-500' : 'bg-ok-500';
   return (
-    <div className={cn('h-1.5 w-full overflow-hidden rounded-full bg-white/5', className)}>
-      <div className={cn('h-full rounded-full transition-all', tone)} style={{ width: `${clamped}%` }} />
+    <div
+      className={cn('h-2 w-full overflow-hidden rounded-full bg-surface-3', className)}
+      role="img"
+      aria-label={`${clamped.toFixed(0)} percent utilised`}
+    >
+      <div
+        className={cn('h-full rounded-full', clamped > 90 ? 'bg-danger' : clamped > 75 ? 'bg-amber' : 'bg-primary')}
+        style={{ width: `${clamped}%` }}
+      />
     </div>
   );
 }

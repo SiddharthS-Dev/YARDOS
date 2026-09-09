@@ -3,17 +3,108 @@
 @tailwind utilities;
 
 /**
- * YARDOS console base styles.
+ * YARDOS design tokens.
  *
- * The console is dark-only by design. This is an operational tool used for
- * whole shifts, frequently on screens behind glass in bright yards; a
- * near-black ground with restrained contrast is easier on the eyes than a
- * white one, and it makes the status colours legible at a glance.
+ * Colour lives in CSS custom properties rather than Tailwind class names so the
+ * console can carry two themes that are both designed, rather than one theme
+ * and its inversion.
+ *
+ * Light is the default: a concrete ground with near-black ink, which is what a
+ * finance officer, a yard manager and a financier all read on ordinary office
+ * screens. Dark is a designed counterpart for the gate, where a screen runs a
+ * whole shift behind glass in a bright yard - the ground is warmed toward the
+ * same hue family rather than being flipped to pure black, and the semantic
+ * hues are lifted so they keep their meaning against it.
+ *
+ * Every foreground/background pair below clears WCAG AA at the size it is used.
  */
 
 @layer base {
   :root {
+    color-scheme: light;
+
+    /* Ground and surfaces */
+    --ground: 241 243 239;        /* #F1F3EF concrete */
+    --surface: 255 255 255;
+    --surface-2: 247 248 245;
+    --surface-3: 237 240 234;
+    --line: 223 227 220;
+    --line-strong: 205 211 201;
+
+    /* Ink */
+    --ink: 16 22 27;              /* #10161B */
+    --ink-2: 74 85 95;
+    --ink-3: 110 122 133;
+    --ink-inverse: 255 255 255;
+
+    /* Semantic. These are the only colours that carry meaning. */
+    --primary: 18 161 80;         /* #12A150 */
+    --primary-strong: 13 132 65;
+    --primary-soft: 226 244 233;
+
+    --amber: 224 137 27;          /* #E0891B */
+    --amber-strong: 180 108 18;
+    --amber-soft: 253 241 224;
+
+    --blue: 46 107 230;           /* #2E6BE6 */
+    --blue-strong: 32 84 190;
+    --blue-soft: 228 236 252;
+
+    --slate: 91 102 114;          /* #5B6672 */
+    --slate-strong: 68 78 88;
+    --slate-soft: 237 239 241;
+
+    --danger: 198 54 47;
+    --danger-strong: 163 40 34;
+    --danger-soft: 252 231 230;
+
+    --focus: 46 107 230;
+
+    /* Elevation. Restrained: this is an operations console, not a card deck. */
+    --shadow-panel: 0 1px 2px rgb(16 22 27 / 0.06), 0 0 0 1px rgb(16 22 27 / 0.06);
+    --shadow-raised: 0 8px 24px rgb(16 22 27 / 0.12), 0 0 0 1px rgb(16 22 27 / 0.08);
+  }
+
+  :root[data-theme='dark'] {
     color-scheme: dark;
+
+    --ground: 11 15 18;
+    --surface: 20 26 31;
+    --surface-2: 27 34 41;
+    --surface-3: 33 42 50;
+    --line: 39 49 58;
+    --line-strong: 54 66 77;
+
+    --ink: 238 242 245;
+    --ink-2: 163 176 187;
+    --ink-3: 120 134 143;
+    --ink-inverse: 11 15 18;
+
+    /* Lifted so they hold their meaning against a dark ground. */
+    --primary: 43 190 106;
+    --primary-strong: 60 208 124;
+    --primary-soft: 18 46 32;
+
+    --amber: 240 162 56;
+    --amber-strong: 248 182 88;
+    --amber-soft: 51 37 16;
+
+    --blue: 90 142 240;
+    --blue-strong: 122 166 245;
+    --blue-soft: 21 33 58;
+
+    --slate: 123 135 148;
+    --slate-strong: 150 162 173;
+    --slate-soft: 31 38 45;
+
+    --danger: 229 105 95;
+    --danger-strong: 240 132 122;
+    --danger-soft: 56 24 22;
+
+    --focus: 90 142 240;
+
+    --shadow-panel: 0 1px 2px rgb(0 0 0 / 0.4), 0 0 0 1px rgb(255 255 255 / 0.06);
+    --shadow-raised: 0 12px 32px rgb(0 0 0 / 0.55), 0 0 0 1px rgb(255 255 255 / 0.08);
   }
 
   html,
@@ -22,71 +113,132 @@
   }
 
   body {
-    @apply bg-base-950 text-slate-300 antialiased;
+    background-color: rgb(var(--ground));
+    color: rgb(var(--ink));
+    -webkit-font-smoothing: antialiased;
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   }
 
-  /* Numbers line up in columns. Essential for money and counts. */
-  .tabular {
-    font-variant-numeric: tabular-nums;
-  }
-
   ::selection {
-    @apply bg-accent-500/30 text-white;
+    background-color: rgb(var(--blue) / 0.22);
   }
 
-  /* A slim scrollbar, so dense panels do not lose width to chrome. */
+  /* Focus is always visible. An operator working by keyboard must be able to
+     see where they are, on either theme. */
+  :focus-visible {
+    outline: 2px solid rgb(var(--focus));
+    outline-offset: 2px;
+  }
+
+  /* Respect a stated preference for less motion. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /* Slim scrollbars, so dense panels do not lose width to chrome. */
   * {
     scrollbar-width: thin;
-    scrollbar-color: rgb(41 58 92) transparent;
+    scrollbar-color: rgb(var(--line-strong)) transparent;
   }
   *::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 9px;
+    height: 9px;
   }
   *::-webkit-scrollbar-track {
     background: transparent;
   }
   *::-webkit-scrollbar-thumb {
-    @apply rounded-full bg-base-600;
-  }
-  *::-webkit-scrollbar-thumb:hover {
-    @apply bg-base-500;
-  }
-
-  /* Focus is always visible. An operator working by keyboard must be able to
-     see where they are. */
-  :focus-visible {
-    @apply outline-none ring-2 ring-accent-400 ring-offset-2 ring-offset-base-950;
+    background-color: rgb(var(--line-strong));
+    border-radius: 9999px;
   }
 }
 
 @layer components {
-  /* Dense operational table. Used by every list screen. */
+  /* --- Numerals ---------------------------------------------------- */
+  /* Money, counts and ages are compared down a column, so they line up. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* A registration number is an identifier and must read like one. */
+  .identifier {
+    @apply font-mono tracking-tight;
+    font-variant-numeric: tabular-nums slashed-zero;
+  }
+
+  /* --- Panels ------------------------------------------------------ */
+  .panel {
+    background-color: rgb(var(--surface));
+    box-shadow: var(--shadow-panel);
+    @apply rounded-lg;
+  }
+
+  /* --- Dense operational table ------------------------------------- */
   .data-table {
     @apply w-full border-collapse text-sm;
   }
   .data-table thead th {
-    @apply sticky top-0 z-10 border-b border-white/5 bg-base-850 px-3 py-2 text-left
-           text-2xs font-semibold uppercase tracking-wider text-muted-500;
+    background-color: rgb(var(--surface-2));
+    color: rgb(var(--ink-3));
+    border-bottom: 1px solid rgb(var(--line));
+    @apply sticky top-0 z-10 px-3 py-2 text-left text-2xs font-semibold uppercase tracking-wider;
   }
   .data-table tbody td {
-    @apply border-b border-white/[0.03] px-3 py-2.5 align-middle text-slate-300;
+    border-bottom: 1px solid rgb(var(--line) / 0.7);
+    color: rgb(var(--ink-2));
+    @apply px-3 py-2.5 align-middle;
   }
   .data-table tbody tr {
     @apply transition-colors;
   }
   .data-table tbody tr:hover {
-    @apply bg-white/[0.025];
+    background-color: rgb(var(--surface-2));
+  }
+  /* A row that is a link target announces itself. */
+  .data-table tbody tr[data-clickable='true'] {
+    @apply cursor-pointer;
   }
 
-  /* Form controls */
+  /* --- Form controls ----------------------------------------------- */
   .input {
-    @apply w-full rounded-md border-0 bg-base-900 px-3 py-2 text-sm text-slate-200
-           ring-1 ring-inset ring-white/10 placeholder:text-muted-600
-           focus:ring-2 focus:ring-inset focus:ring-accent-400;
+    background-color: rgb(var(--surface));
+    color: rgb(var(--ink));
+    border: 1px solid rgb(var(--line-strong));
+    @apply w-full rounded-md px-3 py-2 text-sm transition-colors;
   }
+  .input::placeholder {
+    color: rgb(var(--ink-3));
+  }
+  .input:focus {
+    outline: 2px solid rgb(var(--focus));
+    outline-offset: -1px;
+    border-color: transparent;
+  }
+  .input:disabled {
+    background-color: rgb(var(--surface-2));
+    color: rgb(var(--ink-3));
+    @apply cursor-not-allowed;
+  }
+  .input[aria-invalid='true'] {
+    border-color: rgb(var(--danger));
+  }
+
   .label {
-    @apply mb-1 block text-2xs font-medium uppercase tracking-wider text-muted-500;
+    color: rgb(var(--ink-3));
+    @apply mb-1 block text-2xs font-semibold uppercase tracking-wider;
+  }
+
+  /* --- Scroll container for wide content --------------------------- */
+  /* Wide tables scroll inside their own box. The page body never does. */
+  .scroll-x {
+    @apply overflow-x-auto;
+    scrollbar-width: thin;
   }
 }
