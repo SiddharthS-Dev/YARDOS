@@ -339,16 +339,13 @@ export class ParkingSessionService {
 
     ParkingSessionStateMachine.assert(session.status, ParkingSessionStatus.CLOSED);
 
-    // Set the exit BEFORE computing, so the engine bounds the stay correctly.
-    await tx.parkingSession.update({
-      where: { id: input.sessionId },
-      data: {
-        exitAt: input.exitAt,
-        exitAnprEventId: input.exitAnprEventId ?? null,
-        exitGateId: input.exitGateId ?? null,
-      },
-    });
-
+    // The charge is computed BEFORE the row is touched, with the exit instant
+    // passed explicitly as `asOf`. An earlier version set `exitAt` in its own
+    // UPDATE first, which left the row momentarily as status=OPEN with an exit
+    // time set - and that violates the `parking_sessions_open_has_no_exit`
+    // CHECK constraint. The constraint is correct; the write order was not.
+    // `calculateAndStore` bounds the stay by `asOf` when `exitAt` is still
+    // null, so nothing is lost by deferring the write.
     const charge = await this.charges.calculateAndStore(
       tx as never,
       input.sessionId,
@@ -357,10 +354,15 @@ export class ParkingSessionService {
       { requireRate: input.requireRate, actorId: input.actorId },
     );
 
+    // Status and exit time move together, in one write, so the row is never
+    // in a state the constraint forbids.
     const updated = await tx.parkingSession.updateMany({
       where: { id: input.sessionId, version: session.version },
       data: {
         status: ParkingSessionStatus.CLOSED,
+        exitAt: input.exitAt,
+        exitAnprEventId: input.exitAnprEventId ?? null,
+        exitGateId: input.exitGateId ?? null,
         closedById: input.actorId,
         closureReason: input.closureReason.slice(0, 512),
         version: { increment: 1 },
