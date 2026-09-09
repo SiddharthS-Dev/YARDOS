@@ -1,118 +1,146 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { AlertTriangle, Truck } from 'lucide-react';
+import * as React from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 import { ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
-import { Button } from '@/components/ui/primitives';
+import { type AuthMessage, authMessageFor, landingRouteFor } from '@/lib/auth-errors';
+import { Button, LoadingState } from '@/components/ui/primitives';
+import {
+  AuthCard,
+  AuthHeader,
+  AuthLayout,
+  EmailField,
+  EnvironmentNotice,
+  FormError,
+  PasswordField,
+  UnavailableHint,
+} from '@/components/domain/auth-ui';
 
+const ERROR_ID = 'signin-error';
+
+/**
+ * Sign in.
+ *
+ * The only authentication entry point the backend supports. There is no
+ * self-service password reset, no invitation activation and no access request
+ * endpoint - see docs/AUTH-BACKEND-GAPS.md - so this page states the real
+ * alternative rather than offering links that would lead nowhere.
+ */
 export default function LoginPage() {
+  return (
+    <React.Suspense fallback={<LoadingState label="Loading" />}>
+      <LoginScreen />
+    </React.Suspense>
+  );
+}
+
+function LoginScreen() {
   const { signIn, user, loading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState<{ message: string; code: string } | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [email, setEmail] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const [error, setError] = React.useState<AuthMessage | null>(null);
+  const [submitting, setSubmitting] = React.useState(false);
 
-  useEffect(() => {
-    if (!loading && user) router.replace('/gate');
+  // Arriving here because a session ended is a different situation from
+  // arriving here to sign in, and deserves different words.
+  const reason = searchParams.get('reason');
+  React.useEffect(() => {
+    if (reason === 'session-expired') setError(authMessageFor('TOKEN_EXPIRED'));
+    else if (reason === 'session-ended') setError(authMessageFor('REFRESH_TOKEN_REUSED'));
+  }, [reason]);
+
+  // Already signed in - do not show a sign-in form to someone who has a session.
+  React.useEffect(() => {
+    if (!loading && user) router.replace(landingRouteFor(user));
   }, [loading, user, router]);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (submitting) return;
+
     setError(null);
     setSubmitting(true);
+
     try {
-      await signIn(email, password);
-      router.replace('/gate');
+      const profile = await signIn(email.trim(), password);
+      router.replace(landingRouteFor(profile));
     } catch (caught) {
-      // The server deliberately returns one message for every credential
-      // failure so accounts cannot be enumerated; show it as given.
       if (caught instanceof ApiError) {
-        setError({ message: caught.message, code: caught.code });
+        setError(authMessageFor(caught.code, caught.status));
       } else {
-        setError({ message: 'Could not reach the server.', code: 'NETWORK_ERROR' });
+        setError(authMessageFor('NETWORK_ERROR'));
       }
+      // The email is kept - retyping it after a typo in the password is
+      // pointless friction. The password is cleared, because leaving a failed
+      // one in the field on a shared gate terminal is not acceptable.
+      setPassword('');
     } finally {
       setSubmitting(false);
     }
   }
 
+  if (loading) return <LoadingState label="Checking your session" />;
+
   return (
-    <div className="flex min-h-full items-center justify-center bg-base-950 px-4 py-12">
-      <div className="w-full max-w-sm">
-        <div className="mb-8 flex flex-col items-center text-center">
-          <span className="grid h-11 w-11 place-items-center rounded-lg bg-accent-500/15 ring-1 ring-inset ring-accent-500/30">
-            <Truck className="h-6 w-6 text-accent-400" aria-hidden />
-          </span>
-          <h1 className="mt-3 text-lg font-semibold tracking-wide text-white">YARDOS</h1>
-          <p className="mt-1 text-xs text-muted-500">Sri JP Smartpark operations console</p>
-        </div>
+    <AuthLayout>
+      <AuthHeader />
 
-        <form
-          onSubmit={handleSubmit}
-          className="rounded-panel border border-white/5 bg-base-850 p-5 shadow-panel"
-        >
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="email" className="label">Email address</label>
-              <input
-                id="email"
-                type="email"
-                autoComplete="username"
-                required
-                autoFocus
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                className="input"
-                placeholder="you@srijpsmartpark.example"
-              />
-            </div>
+      <AuthCard title="Sign in">
+        <form onSubmit={handleSubmit} noValidate className="space-y-4">
+          <EmailField
+            value={email}
+            onChange={setEmail}
+            disabled={submitting}
+            autoFocus
+            invalid={Boolean(error)}
+            describedBy={error ? ERROR_ID : undefined}
+          />
 
-            <div>
-              <label htmlFor="password" className="label">Password</label>
-              <input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                className="input"
-              />
-            </div>
+          <PasswordField
+            value={password}
+            onChange={setPassword}
+            autoComplete="current-password"
+            disabled={submitting}
+            invalid={Boolean(error)}
+            describedBy={error ? ERROR_ID : undefined}
+          />
 
-            {error ? (
-              <div
-                role="alert"
-                className="flex items-start gap-2 rounded-md bg-danger-500/10 px-3 py-2 ring-1 ring-inset ring-danger-500/20"
-              >
-                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-danger-400" aria-hidden />
-                <div className="min-w-0">
-                  <p className="text-xs text-danger-400">{error.message}</p>
-                  {error.code === 'ACCOUNT_LOCKED' ? (
-                    <p className="mt-1 text-2xs text-muted-500">
-                      Contact your administrator to unlock the account.
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-            ) : null}
+          <FormError message={error} id={ERROR_ID} />
 
-            <Button type="submit" variant="primary" size="lg" loading={submitting} className="w-full">
-              Sign in
-            </Button>
-          </div>
+          <Button
+            type="submit"
+            variant="primary"
+            size="lg"
+            loading={submitting}
+            aria-busy={submitting}
+            className="w-full"
+          >
+            {submitting ? 'Signing in…' : 'Sign in'}
+          </Button>
         </form>
 
-        <p className="mt-6 text-center text-2xs leading-relaxed text-muted-600">
-          Development build. Seeded data is fictional and all commercial values are
-          placeholders pending Sri JP sign-off.
-        </p>
-      </div>
-    </div>
+        {/* Not a link: there is no self-service reset endpoint, and a button
+            that cannot work is worse than none. See GAP 1. */}
+        <div className="mt-4 border-t border-line pt-3">
+          <UnavailableHint>
+            <span className="font-medium text-ink-2">Forgotten your password?</span> Contact your
+            Sri JP administrator to have it reset.
+          </UnavailableHint>
+        </div>
+      </AuthCard>
+
+      {/* Enterprise platform: accounts are provisioned, not self-registered.
+          There is no access-request endpoint either. See GAP 3. */}
+      <p className="mt-4 text-center text-2xs leading-relaxed text-ink-3">
+        Need access? YARDOS accounts are provisioned by your organisation&apos;s administrator.
+      </p>
+
+      <EnvironmentNotice />
+    </AuthLayout>
   );
 }
