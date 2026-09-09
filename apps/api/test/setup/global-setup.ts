@@ -27,6 +27,15 @@ export default async function globalSetup(): Promise<void> {
   process.env['LOG_LEVEL'] ??= 'error';
   process.env['LOG_PRETTY'] = 'false';
 
+  // The gateway simulator, with a signing secret, so the signed-callback path
+  // is genuinely exercised. The manual provider refuses every webhook, which
+  // would let the signature suite pass without verifying anything.
+  //
+  // This secret is a test fixture. It authenticates nothing outside this run,
+  // and `productionSafetyChecks` refuses PAYMENT_PROVIDER=mock in production.
+  process.env['PAYMENT_PROVIDER'] = 'mock';
+  process.env['PAYMENT_WEBHOOK_SECRET'] ||= 'test-fixture-webhook-secret-not-a-credential';
+
   const apiRoot = path.resolve(__dirname, '../..');
 
   try {
