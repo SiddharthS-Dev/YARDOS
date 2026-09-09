@@ -25,7 +25,7 @@ import { PrismaService } from '@/infrastructure/prisma/prisma.service';
 import { RedisService } from '@/infrastructure/redis/redis.service';
 import { AuditAction, AuditService } from '@/modules/audit/audit.service';
 import { GateDecision, GateService } from '@/modules/parking/gate.service';
-import { AnprProvider, NormalizedAnprEvent } from './anpr.provider';
+import { AnprProvider } from './anpr.provider';
 
 export interface IngestResult {
   anprEventId: string;

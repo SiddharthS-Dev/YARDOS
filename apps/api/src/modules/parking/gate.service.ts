@@ -26,7 +26,6 @@ import { JobName, QueueService } from '@/infrastructure/queue/queue.service';
 import { AuditAction, AuditService } from '@/modules/audit/audit.service';
 import { RateResolutionService } from '@/modules/contract/rate-resolution.service';
 import { VehicleService } from '@/modules/vehicle/vehicle.service';
-import { ParkingSessionStateMachine } from '@/modules/shared/state-machine';
 
 /** What the gate decided, and why. Rendered directly on the gate screen. */
 export interface GateDecision {
