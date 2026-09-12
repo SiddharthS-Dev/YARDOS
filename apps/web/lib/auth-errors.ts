@@ -64,6 +64,15 @@ const MESSAGES: Record<string, AuthMessage> = {
     title: 'Password not accepted',
     body: 'The new password does not meet the password policy.',
   },
+  // Raised by the request DTO before the service's policy check runs - a
+  // password under 8 characters never reaches validatePolicy. Distinct from
+  // PASSWORD_POLICY_VIOLATION, and emphatically not a server fault: without
+  // this it fell through to the generic "something went wrong at our end",
+  // which tells a user with a bad input that WE broke.
+  VALIDATION_FAILED: {
+    title: 'Check what you entered',
+    body: 'Some of the details are not valid. Review the fields and try again.',
+  },
   FORBIDDEN: {
     title: 'Access restricted',
     body: "You don't have permission to access this area.",

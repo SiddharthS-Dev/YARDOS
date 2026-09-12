@@ -57,6 +57,19 @@ describe('authMessageFor', () => {
     expect(authMessageFor('ACCOUNT_LOCKED').hint).toMatch(/unlock/i);
   });
 
+  it('does not report a bad input as a server fault', () => {
+    // VALIDATION_FAILED comes from the request DTO, before the service's own
+    // policy check. Verified against the running API: a password under 8
+    // characters returns VALIDATION_FAILED, while 8 or more that fails the
+    // policy returns PASSWORD_POLICY_VIOLATION. Both are the caller's input,
+    // and neither should read as "something went wrong at our end".
+    const validation = authMessageFor('VALIDATION_FAILED', 400);
+
+    expect(validation.title).toBe('Check what you entered');
+    expect(validation.title).not.toBe('Something went wrong at our end');
+    expect(authMessageFor('PASSWORD_POLICY_VIOLATION', 400).title).toBe('Password not accepted');
+  });
+
   it('falls back to a generic message for an unmapped code', () => {
     // A new backend error must never surface its own wording to a user.
     const message = authMessageFor('SOME_NEW_INTERNAL_CODE');
@@ -77,7 +90,7 @@ describe('authMessageFor', () => {
     for (const code of [
       'INVALID_CREDENTIALS', 'ACCOUNT_LOCKED', 'ACCOUNT_NOT_ACTIVE', 'RATE_LIMITED',
       'TOKEN_EXPIRED', 'TOKEN_INVALID', 'REFRESH_TOKEN_REUSED', 'NETWORK_ERROR',
-      'FORBIDDEN', 'PASSWORD_POLICY_VIOLATION', 'UNRECOGNISED',
+      'FORBIDDEN', 'PASSWORD_POLICY_VIOLATION', 'VALIDATION_FAILED', 'UNRECOGNISED',
     ]) {
       const message = authMessageFor(code);
       expect(message.title.length).toBeGreaterThan(3);
