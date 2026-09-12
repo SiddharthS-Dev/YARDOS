@@ -19,6 +19,7 @@ const base = {
   rootDir: '.',
   moduleFileExtensions: ['js', 'json', 'ts'],
   moduleNameMapper: {
+    '^@/(.*)\.js$': '<rootDir>/src/$1',
     '^@/(.*)$': '<rootDir>/src/$1',
   },
   transform: {
