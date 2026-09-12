@@ -174,9 +174,14 @@ jobs:
         working-directory: apps/api
         run: node scripts/check-schema-drift.mjs
 
+      # Invokes the npm script rather than repeating its command. The inlined
+      # copy drifted from package.json and broke the moment the path-alias
+      # registration changed, so CI was seeding a different way to every
+      # developer - which is exactly the difference a CI step must not have.
+      # dotenv-cli is skipped: the job already supplies DATABASE_URL and the
+      # SEED_* variables as job-level env.
       - name: Seed demo data
-        working-directory: apps/api
-        run: npx ts-node -P prisma/tsconfig.seed.json -r tsconfig-paths/register --transpile-only prisma/seed.ts
+        run: npm run db:seed --workspace=@smartpark/api
 
       - name: Build API
         run: npm run build --workspace=@smartpark/api
