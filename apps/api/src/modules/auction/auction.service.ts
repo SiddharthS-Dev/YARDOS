@@ -1102,7 +1102,7 @@ export class AuctionService {
       city?: string | null;
     },
   ): Promise<BidderItem> {
-    const { generateBidderCode } = await import('@/common/util/ids');
+    const { generateBidderCode } = await import('@/common/util/ids.js');
 
     const bidder = await this.prisma.transaction(async (tx) => {
       const created = await tx.bidder.create({
