@@ -24,13 +24,13 @@
     "db:migrate": "dotenv -e ../../.env -- prisma migrate dev",
     "db:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
     "db:reset": "dotenv -e ../../.env -- prisma migrate reset --force",
-    "db:seed": "dotenv -e ../../.env -- ts-node -P prisma/tsconfig.seed.json -r tsconfig-paths/register --transpile-only prisma/seed.ts",
+    "db:seed": "dotenv -e ../../.env -- ts-node -P prisma/tsconfig.seed.json -r ./prisma/register-paths.cjs --transpile-only prisma/seed.ts",
     "db:studio": "dotenv -e ../../.env -- prisma studio",
-    "openapi:export": "dotenv -e ../../.env -- ts-node -P prisma/tsconfig.seed.json -r tsconfig-paths/register --transpile-only src/tooling/export-openapi.ts",
+    "openapi:export": "dotenv -e ../../.env -- ts-node -P prisma/tsconfig.seed.json -r ./prisma/register-paths.cjs --transpile-only src/tooling/export-openapi.ts",
     "db:validate": "dotenv -e ../../.env -- prisma validate"
   },
   "prisma": {
-    "seed": "dotenv -e ../../.env -- ts-node -P prisma/tsconfig.seed.json -r tsconfig-paths/register --transpile-only prisma/seed.ts"
+    "seed": "dotenv -e ../../.env -- ts-node -P prisma/tsconfig.seed.json -r ./prisma/register-paths.cjs --transpile-only prisma/seed.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.723.0",
