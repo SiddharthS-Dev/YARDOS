@@ -79,10 +79,12 @@ if "%APPS_ONLY%"=="1" (
       echo  Stopping PostgreSQL, Redis and MinIO...
       REM `stop`, not `down`: containers and named volumes both survive,
       REM so the next start is fast and the data is still there.
-      docker compose -f docker/docker-compose.yml stop >nul 2>&1
+      REM --env-file .env so this addresses the same containers start.bat
+      REM created; without it Compose resolves different published ports.
+      docker compose --env-file .env -f docker/docker-compose.yml stop >nul 2>&1
       if errorlevel 1 (
         echo  [warn] Could not stop the Docker services cleanly.
-        echo      Try: docker compose -f docker/docker-compose.yml stop
+        echo      Try: docker compose --env-file .env -f docker/docker-compose.yml stop
       ) else (
         echo  [ok] Docker services stopped ^(data preserved^)
       )

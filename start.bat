@@ -185,6 +185,11 @@ REM  its PID is recorded so stop.bat can end the whole process tree.
 REM  npm wraps the real node process as a child, so killing the
 REM  recorded PID alone would orphan node and leave the port bound.
 REM ---------------------------------------------------------------
+REM The MinIO console port is overridable, so read it back rather than
+REM printing a number that may not be the one Compose published.
+set "MINIO_CONSOLE=9001"
+for /f "usebackq tokens=2 delims==" %%v in (`findstr /b /c:"MINIO_CONSOLE_PORT=" ".env"`) do set "MINIO_CONSOLE=%%v"
+
 if not exist ".run" mkdir ".run"
 
 echo.
@@ -207,7 +212,7 @@ echo    Console        http://localhost:3001
 echo    API            http://localhost:3000/api/v1
 echo    API docs       http://localhost:3000/docs
 echo    Health         http://localhost:3000/health
-echo    MinIO console  http://localhost:9001
+echo    MinIO console  http://localhost:!MINIO_CONSOLE!
 echo.
 echo    The console compiles on first request, so the first page
 echo    load takes appreciably longer than later ones.
@@ -258,13 +263,18 @@ if "%RESET%"=="1" (
     exit /b 1
   )
   echo  Removing containers and volumes...
-  docker compose -f docker/docker-compose.yml down -v
+  docker compose --env-file .env -f docker/docker-compose.yml down -v
   set "SEED=1"
 )
 
 echo.
 echo  Starting PostgreSQL, Redis and MinIO...
-docker compose -f docker/docker-compose.yml up -d
+REM  --env-file .env is required. Compose looks for a .env beside the COMPOSE
+REM  FILE - that is docker/.env, which does not exist - so without this flag the
+REM  POSTGRES_PORT / REDIS_PORT / MINIO_PORT overrides the compose file
+REM  documents are silently ignored, and the stack fails to start on any machine
+REM  where another project already holds one of the default ports.
+docker compose --env-file .env -f docker/docker-compose.yml up -d
 if errorlevel 1 (
   echo  [X] Could not start the Docker services.
   exit /b 1
@@ -289,7 +299,7 @@ set /a WAITED+=2
 if !WAITED! GEQ 120 (
   echo  [X] Services did not become healthy within 120 seconds.
   echo      postgres=!PG_STATE!  redis=!REDIS_STATE!
-  echo      Inspect with: docker compose -f docker/docker-compose.yml logs
+  echo      Inspect with: docker compose --env-file .env -f docker/docker-compose.yml logs
   exit /b 1
 )
 call :sleep 2
